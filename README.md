@@ -89,7 +89,7 @@ Phases are defined in [`docs/VOLARI_HANDOFF.md`](docs/VOLARI_HANDOFF.md) §9:
 - **Phase 0 — Scaffold** ✅
 - **Phase 1 — Prisma schema & world seed** ✅
 - **Phase 2 — Authoritative IslandRoom + Phaser render** ✅
-- Phase 3 — Farming + animals (server timers)
+- **Phase 3 — Farming + animals (server timers)** ✅
 - Phase 4 — Economy, shop, market
 - Phase 5 — Land claim + Volari Deeds (cNFT) + neighbors
 - Phase 6 — `$VOLA` token integration

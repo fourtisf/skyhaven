@@ -1,47 +1,68 @@
 import { Room, type Client } from "@colyseus/core";
-import { isLandPx, SPAWN, WORLD_W, WORLD_H } from "@volari/world";
-import { IslandState, Player } from "./schema.js";
+import {
+  isLandPx,
+  isPond,
+  SPAWN,
+  TILE,
+  WORLD_W,
+  WORLD_H,
+  generateParcels,
+  DEMO_TIMERS,
+} from "@volari/world";
+import { IslandState, Player, Crop, Animal } from "./schema.js";
 
 const SPEED = 190; // px/sec — server-owned movement speed
 const TICK_HZ = 30;
+const REACH = TILE * 1.6; // how close a player must be to act on a tile/animal
+const GOLDEN_WOOL_CHANCE = 0.08;
+
+// Phase 3 uses the prototype's demo-fast timers so the loop is playable in
+// seconds. Phase 7 rebalances to the production TIMERS (§8).
+const T = DEMO_TIMERS;
 
 interface JoinOptions {
   name?: string;
   wallet?: string;
 }
-
 interface MoveMessage {
   dx?: number;
   dy?: number;
+}
+interface TileMessage {
+  x?: number;
+  y?: number;
+}
+interface AnimalMessage {
+  id?: string;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
+function tileKey(tx: number, ty: number): string {
+  return `${tx}:${ty}`;
+}
 
 /**
- * Authoritative island room (Phase 2).
+ * Authoritative island room (Phases 2–3).
  *
- * The world (land mask) is the deterministic @volari/world model — identical
- * to what the Phase 1 seed wrote to Postgres — so the server validates
- * movement against land without a DB round-trip. The client sends only input
- * intent; the server integrates position, rejects moves onto sky/out-of-bounds
- * (teleport/speed guard, §6), and broadcasts state diffs.
- *
- * Phase 3+ layers farming/animals and persists mutations through @volari/db.
+ * The client sends intents; the server owns position, tile state, crop growth,
+ * and animal produce/hunger — all derived from server timestamps (§2). Phase 3
+ * holds state in memory (seeded from @volari/world); Phase 4 persists mutations
+ * through @volari/db and adds coins/market/XP.
  */
 export class IslandRoom extends Room<IslandState> {
   override maxClients = 30;
+  private animalSeq = 0;
 
   override onCreate(): void {
     this.setState(new IslandState());
 
-    this.onMessage("move", (client, message: MoveMessage) => {
+    this.onMessage("move", (client, m: MoveMessage) => {
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
-      let dx = Number(message?.dx) || 0;
-      let dy = Number(message?.dy) || 0;
-      // Never trust magnitude — normalize to a unit vector at most.
+      let dx = Number(m?.dx) || 0;
+      let dy = Number(m?.dy) || 0;
       const len = Math.hypot(dx, dy);
       if (len > 1) {
         dx /= len;
@@ -50,6 +71,13 @@ export class IslandRoom extends Room<IslandState> {
       p.inx = dx;
       p.iny = dy;
     });
+
+    this.onMessage("till", (c, m: TileMessage) => this.onTill(c, m));
+    this.onMessage("plant", (c, m: TileMessage) => this.onPlant(c, m));
+    this.onMessage("water", (c, m: TileMessage) => this.onWater(c, m));
+    this.onMessage("harvestCrop", (c, m: TileMessage) => this.onHarvestCrop(c, m));
+    this.onMessage("harvestAnimal", (c, m: AnimalMessage) => this.onHarvestAnimal(c, m));
+    this.onMessage("feed", (c, m: AnimalMessage) => this.onFeed(c, m));
 
     this.setSimulationInterval((dt) => this.tick(dt), 1000 / TICK_HZ);
   }
@@ -61,22 +89,172 @@ export class IslandRoom extends Room<IslandState> {
     p.name = (options.name ?? "Pilot").slice(0, 16);
     p.wallet = (options.wallet ?? "").slice(0, 64);
     this.state.players.set(client.sessionId, p);
+    this.grantStarterAnimals(client.sessionId);
   }
 
   override onLeave(client: Client): void {
     this.state.players.delete(client.sessionId);
+    // Remove this player's animals.
+    for (const [id, a] of this.state.animals) {
+      if (a.owner === client.sessionId) this.state.animals.delete(id);
+    }
   }
 
+  // ── farming intents ────────────────────────────────────────
+  private near(p: Player, tx: number, ty: number): boolean {
+    const cx = tx * TILE + TILE / 2;
+    const cy = ty * TILE + TILE / 2;
+    return Math.hypot(p.x - cx, p.y - cy) <= REACH;
+  }
+
+  private onTill(client: Client, m: TileMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const tx = Math.floor(Number(m?.x));
+    const ty = Math.floor(Number(m?.y));
+    if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
+    if (!this.near(p, tx, ty)) return;
+    if (!isLandPx(tx * TILE + 28, ty * TILE + 28) || isPond(tx, ty)) return;
+    const key = tileKey(tx, ty);
+    if (this.state.crops.has(key)) return; // already tilled/planted
+    const crop = new Crop();
+    crop.state = "TILLED";
+    crop.worldX = tx;
+    crop.worldY = ty;
+    this.state.crops.set(key, crop);
+  }
+
+  private onPlant(client: Client, m: TileMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const tx = Math.floor(Number(m?.x));
+    const ty = Math.floor(Number(m?.y));
+    const crop = this.state.crops.get(tileKey(tx, ty));
+    if (!crop || crop.state !== "TILLED") return;
+    if (!this.near(p, tx, ty)) return;
+    if (p.seeds <= 0) return;
+    p.seeds -= 1;
+    const now = Date.now();
+    crop.state = "PLANTED";
+    crop.cropType = "BERRY";
+    crop.plantedAt = now;
+    crop.watered = false;
+    crop.readyAt = now + T.cropUnwateredMs; // unwatered is slow until watered
+  }
+
+  private onWater(client: Client, m: TileMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const tx = Math.floor(Number(m?.x));
+    const ty = Math.floor(Number(m?.y));
+    const crop = this.state.crops.get(tileKey(tx, ty));
+    if (!crop || crop.state !== "PLANTED" || crop.watered) return;
+    if (!this.near(p, tx, ty)) return;
+    const now = Date.now();
+    crop.watered = true;
+    // Watering accelerates the remaining grow time (prototype: ~0.35× → 1×).
+    crop.readyAt = now + Math.max(0, (crop.readyAt - now) * 0.35);
+  }
+
+  private onHarvestCrop(client: Client, m: TileMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const tx = Math.floor(Number(m?.x));
+    const ty = Math.floor(Number(m?.y));
+    const crop = this.state.crops.get(tileKey(tx, ty));
+    if (!crop || crop.state !== "PLANTED") return;
+    if (!this.near(p, tx, ty)) return;
+    if (Date.now() < crop.readyAt) return; // not ready — server decides
+    p.berries += 1;
+    // Reset to tilled soil so it can be replanted.
+    crop.state = "TILLED";
+    crop.cropType = "";
+    crop.plantedAt = 0;
+    crop.readyAt = 0;
+    crop.watered = false;
+  }
+
+  // ── animal intents ─────────────────────────────────────────
+  private onHarvestAnimal(client: Client, m: AnimalMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const a = this.state.animals.get(String(m?.id));
+    if (!a || a.owner !== client.sessionId || !a.hasProduce) return;
+    if (Math.hypot(p.x - a.x, p.y - a.y) > REACH) return;
+    if (a.type === "HEN") {
+      p.eggs += 1;
+    } else if (a.type === "AURORA") {
+      p.goldwool += 1;
+    } else {
+      // SHEEP: server rolls Golden Wool (logged in a later phase).
+      if (this.roll() < GOLDEN_WOOL_CHANCE) p.goldwool += 1;
+      else p.wool += 1;
+    }
+    a.hasProduce = false;
+    a.produceReadyAt = Date.now() + this.produceMs(a.type);
+  }
+
+  private onFeed(client: Client, m: AnimalMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const a = this.state.animals.get(String(m?.id));
+    if (!a || a.owner !== client.sessionId) return;
+    if (Math.hypot(p.x - a.x, p.y - a.y) > REACH) return;
+    if (p.feed <= 0) return;
+    p.feed -= 1;
+    a.fed = true;
+    a.hungerAt = Date.now() + T.hungerMs;
+  }
+
+  // ── simulation ─────────────────────────────────────────────
   private tick(dtMs: number): void {
     const dt = dtMs / 1000;
+    const now = Date.now();
+
     this.state.players.forEach((p) => {
       if (p.inx === 0 && p.iny === 0) return;
       const nx = p.x + p.inx * SPEED * dt;
       const ny = p.y + p.iny * SPEED * dt;
-      // Axis-separated collision so sliding along cliffs feels natural; only
-      // land tiles are walkable.
       if (isLandPx(nx, p.y)) p.x = clamp(nx, 0, WORLD_W);
       if (isLandPx(p.x, ny)) p.y = clamp(ny, 0, WORLD_H);
     });
+
+    this.state.animals.forEach((a) => {
+      if (now >= a.hungerAt) a.fed = false;
+      if (a.fed && !a.hasProduce && now >= a.produceReadyAt) a.hasProduce = true;
+    });
+  }
+
+  // ── helpers ────────────────────────────────────────────────
+  private produceMs(type: string): number {
+    return type === "SHEEP" || type === "AURORA" ? T.sheepWoolMs : T.henEggMs;
+  }
+
+  private roll(): number {
+    // Server-side weighted roll. (Math.random is fine in the app runtime.)
+    return Math.random();
+  }
+
+  private grantStarterAnimals(sessionId: string): void {
+    const owned = generateParcels().find((p) => p.owner === "you");
+    // Place on the owned tiles nearest spawn so a new player starts beside them.
+    const spots = (owned?.tiles ?? [])
+      .map((t) => ({ x: t.worldX * TILE + 28, y: t.worldY * TILE + 28 }))
+      .sort((a, b) => Math.hypot(a.x - SPAWN.x, a.y - SPAWN.y) - Math.hypot(b.x - SPAWN.x, b.y - SPAWN.y))
+      .slice(0, 2);
+    const now = Date.now();
+    const make = (type: string, spot: { x: number; y: number } | undefined) => {
+      const a = new Animal();
+      a.owner = sessionId;
+      a.type = type;
+      a.x = spot?.x ?? SPAWN.x;
+      a.y = spot?.y ?? SPAWN.y;
+      a.fed = true;
+      a.hungerAt = now + T.hungerMs;
+      a.produceReadyAt = now + this.produceMs(type);
+      this.state.animals.set(`a${this.animalSeq++}`, a);
+    };
+    make("HEN", spots[0]);
+    make("SHEEP", spots[1]);
   }
 }

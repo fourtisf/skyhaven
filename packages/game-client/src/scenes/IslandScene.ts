@@ -14,21 +14,48 @@ import {
 } from "@volari/world";
 import { connectIsland } from "../net/room";
 
-const SPEED = 190; // px/sec — must match the server (offline fallback only)
+const SPEED = 190; // px/sec — matches the server (offline fallback only)
+const REACH = TILE * 1.6;
 
 interface NetPlayer {
   x: number;
   y: number;
   name: string;
+  seeds: number;
+  feed: number;
+  berries: number;
+  eggs: number;
+  wool: number;
+  goldwool: number;
+}
+interface NetCrop {
+  state: string;
+  cropType: string;
+  plantedAt: number;
+  readyAt: number;
+  watered: boolean;
+  worldX: number;
+  worldY: number;
+}
+interface NetAnimal {
+  owner: string;
+  type: string;
+  x: number;
+  y: number;
+  fed: boolean;
+  hasProduce: boolean;
+}
+type SchemaMap<T> = {
+  forEach: (cb: (v: T, key: string) => void) => void;
+  get: (key: string) => T | undefined;
+};
+
+interface PendingAction {
+  msg: string;
+  payload: Record<string, unknown>;
+  label: string;
 }
 
-/**
- * IslandScene (Phase 2) — renders the floating island + players and drives
- * movement. When the realtime server is reachable it is fully authoritative
- * (input → intent → server → state). When it is not (e.g. before the realtime
- * service is deployed) it falls back to local, collision-checked movement so
- * the island stays explorable.
- */
 export class IslandScene extends Phaser.Scene {
   private room?: Room;
   private online = false;
@@ -36,15 +63,17 @@ export class IslandScene extends Phaser.Scene {
   private local!: Phaser.GameObjects.Container;
   private localPos = { x: SPAWN.x, y: SPAWN.y };
   private remotes = new Map<string, Phaser.GameObjects.Container>();
+  private cropViews = new Map<string, Phaser.GameObjects.Container>();
+  private animalViews = new Map<string, Phaser.GameObjects.Container>();
 
-  private keys!: {
-    up: Phaser.Input.Keyboard.Key;
-    down: Phaser.Input.Keyboard.Key;
-    left: Phaser.Input.Keyboard.Key;
-    right: Phaser.Input.Keyboard.Key;
-  };
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private keys!: Record<"up" | "down" | "left" | "right" | "act", Phaser.Input.Keyboard.Key>;
   private lastSent = { dx: 0, dy: 0 };
+
+  private hud!: Phaser.GameObjects.Text;
   private status!: Phaser.GameObjects.Text;
+  private prompt!: Phaser.GameObjects.Text;
+  private action: PendingAction | null = null;
 
   constructor() {
     super("island");
@@ -67,30 +96,54 @@ export class IslandScene extends Phaser.Scene {
       down: kb.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       left: kb.addKey(Phaser.Input.Keyboard.KeyCodes.A),
       right: kb.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+      act: kb.addKey(Phaser.Input.Keyboard.KeyCodes.E),
     };
-    kb.addKeys({ up: "UP", down: "DOWN", left: "LEFT", right: "RIGHT" }); // arrows too
     this.cursors = kb.createCursorKeys();
 
-    this.status = this.add
-      .text(10, 10, "connecting…", {
+    this.hud = this.add
+      .text(10, 10, "", {
         fontFamily: "Nunito, sans-serif",
-        fontSize: "13px",
+        fontSize: "15px",
         color: "#2a2540",
-        backgroundColor: "rgba(255,253,246,0.8)",
-        padding: { x: 8, y: 4 },
+        backgroundColor: "rgba(255,253,246,0.9)",
+        padding: { x: 10, y: 6 },
       })
       .setScrollFactor(0)
       .setDepth(5000);
+    this.status = this.add
+      .text(10, 44, "connecting…", {
+        fontFamily: "Nunito, sans-serif",
+        fontSize: "12px",
+        color: "#2a2540",
+        backgroundColor: "rgba(255,253,246,0.8)",
+        padding: { x: 8, y: 3 },
+      })
+      .setScrollFactor(0)
+      .setDepth(5000);
+    this.prompt = this.add
+      .text(0, 0, "", {
+        fontFamily: "Fredoka, sans-serif",
+        fontSize: "14px",
+        color: "#ffffff",
+        backgroundColor: "rgba(42,37,64,0.92)",
+        padding: { x: 12, y: 6 },
+      })
+      .setScrollFactor(0)
+      .setDepth(5001)
+      .setOrigin(0.5)
+      .setVisible(false);
+
+    // E key or tap/click triggers the current contextual action.
+    kb.on("keydown-E", () => this.fireAction());
+    this.input.on("pointerdown", () => this.fireAction());
 
     void this.connect();
   }
 
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-
   private async connect(): Promise<void> {
     const url = (this.registry.get("serverUrl") as string | undefined) ?? "";
     if (!url) {
-      this.status.setText("offline (no server url) · WASD to move");
+      this.status.setText("offline (no server url) · explore with WASD");
       return;
     }
     try {
@@ -98,13 +151,13 @@ export class IslandScene extends Phaser.Scene {
       const room = await connectIsland(url, { name });
       this.room = room;
       this.online = true;
-      this.status.setText("online · WASD to move");
+      this.status.setText("online · WASD move · E / tap to act");
       room.onLeave(() => {
         this.online = false;
-        this.status.setText("disconnected · offline (WASD)");
+        this.status.setText("disconnected · offline (explore only)");
       });
     } catch {
-      this.status.setText("offline (server unreachable) · WASD to move");
+      this.status.setText("offline (server unreachable) · explore with WASD");
     }
   }
 
@@ -116,8 +169,6 @@ export class IslandScene extends Phaser.Scene {
     const dy =
       (this.keys.up.isDown || this.cursors.up?.isDown ? -1 : 0) +
       (this.keys.down.isDown || this.cursors.down?.isDown ? 1 : 0);
-
-    // Normalize diagonals.
     let nx = dx;
     let ny = dy;
     const len = Math.hypot(dx, dy);
@@ -127,18 +178,22 @@ export class IslandScene extends Phaser.Scene {
     }
 
     if (this.online && this.room) {
-      // Authoritative: send intent on change, render own + remote players from state.
       if (nx !== this.lastSent.dx || ny !== this.lastSent.dy) {
         this.room.send("move", { dx: nx, dy: ny });
         this.lastSent = { dx: nx, dy: ny };
       }
       this.syncFromServer();
+      this.syncCrops();
+      this.syncAnimals();
+      this.updateHud();
+      this.computeAction();
     } else {
-      // Offline fallback: integrate locally with the same land collision.
       this.stepLocal(nx, ny, dt);
+      this.hud.setText("explore mode — connect a realtime server to farm");
     }
   }
 
+  // ── movement ───────────────────────────────────────────────
   private stepLocal(nx: number, ny: number, dt: number): void {
     const tx = this.localPos.x + nx * SPEED * dt;
     const ty = this.localPos.y + ny * SPEED * dt;
@@ -150,11 +205,8 @@ export class IslandScene extends Phaser.Scene {
   private syncFromServer(): void {
     const room = this.room;
     if (!room) return;
-    const players = room.state.players as
-      | { forEach: (cb: (p: NetPlayer, key: string) => void) => void }
-      | undefined;
+    const players = room.state.players as SchemaMap<NetPlayer> | undefined;
     if (!players) return;
-
     const seen = new Set<string>();
     players.forEach((p, key) => {
       seen.add(key);
@@ -171,8 +223,6 @@ export class IslandScene extends Phaser.Scene {
       }
       c.setPosition(p.x, p.y);
     });
-
-    // Drop players who left.
     for (const [key, c] of this.remotes) {
       if (!seen.has(key)) {
         c.destroy();
@@ -181,11 +231,191 @@ export class IslandScene extends Phaser.Scene {
     }
   }
 
+  // ── crops ──────────────────────────────────────────────────
+  private syncCrops(): void {
+    const room = this.room;
+    if (!room) return;
+    const crops = room.state.crops as SchemaMap<NetCrop> | undefined;
+    if (!crops) return;
+    const now = Date.now();
+    const seen = new Set<string>();
+    crops.forEach((c, key) => {
+      seen.add(key);
+      let view = this.cropViews.get(key);
+      if (!view) {
+        view = this.add.container(0, 0).setDepth(3);
+        view.setData("kind", "");
+        this.cropViews.set(key, view);
+      }
+      const cx = c.worldX * TILE + TILE / 2;
+      const cy = c.worldY * TILE + TILE / 2;
+      view.setPosition(cx, cy);
+      this.paintCrop(view, c, now);
+    });
+    for (const [key, v] of this.cropViews) {
+      if (!seen.has(key)) {
+        v.destroy();
+        this.cropViews.delete(key);
+      }
+    }
+  }
+
+  private paintCrop(view: Phaser.GameObjects.Container, c: NetCrop, now: number): void {
+    view.removeAll(true);
+    // Soil patch.
+    const soil = this.add
+      .rectangle(0, 0, TILE - 14, TILE - 14, c.watered ? 0x6a4a32 : 0x8a5a3c)
+      .setStrokeStyle(2, 0x5a3c28);
+    view.add(soil);
+
+    if (c.state === "PLANTED") {
+      const ready = now >= c.readyAt;
+      if (ready) {
+        // Ripe berries.
+        for (const [ox, oy] of [
+          [-6, -2],
+          [6, -2],
+          [0, -10],
+        ] as const) {
+          view.add(this.add.circle(ox, oy, 5, 0x8e3bd6).setStrokeStyle(1, 0x5a2487));
+        }
+        view.setScale(1 + Math.sin(now / 180) * 0.06);
+      } else {
+        const frac = Phaser.Math.Clamp(
+          (now - c.plantedAt) / Math.max(1, c.readyAt - c.plantedAt),
+          0.05,
+          1,
+        );
+        const h = 6 + frac * 18;
+        view.add(this.add.rectangle(0, 6 - h / 2, 4, h, 0x4caf50));
+        view.add(this.add.circle(0, 6 - h, 4 + frac * 4, 0x68c46a));
+        view.setScale(1);
+        if (c.watered) view.add(this.add.circle(10, 8, 3, 0x4ea3e0, 0.9));
+      }
+    } else {
+      view.setScale(1);
+    }
+  }
+
+  // ── animals ────────────────────────────────────────────────
+  private syncAnimals(): void {
+    const room = this.room;
+    if (!room) return;
+    const animals = room.state.animals as SchemaMap<NetAnimal> | undefined;
+    if (!animals) return;
+    const seen = new Set<string>();
+    animals.forEach((a, key) => {
+      seen.add(key);
+      let view = this.animalViews.get(key);
+      if (!view) {
+        view = this.makeAnimal(a.type);
+        this.animalViews.set(key, view);
+      }
+      view.setPosition(a.x, a.y);
+      const bubble = view.getByName("bubble") as Phaser.GameObjects.Text | null;
+      if (bubble) bubble.setVisible(a.hasProduce);
+      const hungry = view.getByName("hungry") as Phaser.GameObjects.Text | null;
+      if (hungry) hungry.setVisible(!a.fed);
+    });
+    for (const [key, v] of this.animalViews) {
+      if (!seen.has(key)) {
+        v.destroy();
+        this.animalViews.delete(key);
+      }
+    }
+  }
+
+  private makeAnimal(type: string): Phaser.GameObjects.Container {
+    const color = type === "HEN" ? 0xfff4e0 : type === "AURORA" ? 0xf6b8e0 : 0xf0ead8;
+    const shadow = this.add.ellipse(0, 12, 30, 10, 0x000000, 0.18);
+    const body = this.add.ellipse(0, 0, 30, 24, color).setStrokeStyle(2, 0x2a2540);
+    const head = this.add.circle(11, -8, 7, color).setStrokeStyle(2, 0x2a2540);
+    const produce = type === "HEN" ? "🥚" : type === "AURORA" ? "✨" : "🧶";
+    const bubble = this.add
+      .text(0, -26, produce, { fontSize: "16px" })
+      .setOrigin(0.5)
+      .setName("bubble")
+      .setVisible(false);
+    const hungry = this.add
+      .text(-14, -20, "❗", { fontSize: "14px" })
+      .setOrigin(0.5)
+      .setName("hungry")
+      .setVisible(false);
+    return this.add.container(0, 0, [shadow, body, head, bubble, hungry]).setDepth(900);
+  }
+
+  // ── contextual action ──────────────────────────────────────
+  private computeAction(): void {
+    const room = this.room;
+    if (!room) {
+      this.action = null;
+      this.prompt.setVisible(false);
+      return;
+    }
+    const me = (room.state.players as SchemaMap<NetPlayer>).get(room.sessionId);
+    if (!me) return;
+    const px = this.localPos.x;
+    const py = this.localPos.y;
+
+    // 1) Animals in reach.
+    let best: PendingAction | null = null;
+    (room.state.animals as SchemaMap<NetAnimal>).forEach((a, id) => {
+      if (a.owner !== room.sessionId) return;
+      if (Math.hypot(px - a.x, py - a.y) > REACH) return;
+      if (a.hasProduce) best = { msg: "harvestAnimal", payload: { id }, label: "Collect" };
+      else if (!a.fed && me.feed > 0 && !best)
+        best = { msg: "feed", payload: { id }, label: "Feed" };
+    });
+
+    // 2) Tile under the player.
+    if (!best) {
+      const tx = Math.floor(px / TILE);
+      const ty = Math.floor(py / TILE);
+      const key = `${tx}:${ty}`;
+      const crop = (room.state.crops as SchemaMap<NetCrop>).get(key);
+      if (crop) {
+        if (crop.state === "PLANTED" && Date.now() >= crop.readyAt)
+          best = { msg: "harvestCrop", payload: { x: tx, y: ty }, label: "Harvest" };
+        else if (crop.state === "PLANTED" && !crop.watered)
+          best = { msg: "water", payload: { x: tx, y: ty }, label: "Water" };
+        else if (crop.state === "TILLED" && me.seeds > 0)
+          best = { msg: "plant", payload: { x: tx, y: ty }, label: "Plant" };
+      } else if (isLandPx(tx * TILE + 28, ty * TILE + 28) && !isPond(tx, ty)) {
+        best = { msg: "till", payload: { x: tx, y: ty }, label: "Till" };
+      }
+    }
+
+    this.action = best;
+    if (best) {
+      this.prompt
+        .setText(`[E] ${(best as PendingAction).label}`)
+        .setVisible(true)
+        .setPosition(this.scale.width / 2, this.scale.height - 60);
+    } else {
+      this.prompt.setVisible(false);
+    }
+  }
+
+  private fireAction(): void {
+    if (this.online && this.room && this.action) {
+      this.room.send(this.action.msg, this.action.payload);
+    }
+  }
+
+  private updateHud(): void {
+    const room = this.room;
+    if (!room) return;
+    const me = (room.state.players as SchemaMap<NetPlayer>).get(room.sessionId);
+    if (!me) return;
+    this.hud.setText(
+      `🌱 ${me.seeds}   🌾 ${me.feed}   🫐 ${me.berries}   🥚 ${me.eggs}   🧶 ${me.wool}   ✨ ${me.goldwool}`,
+    );
+  }
+
+  // ── avatars + terrain ──────────────────────────────────────
   private makeAvatar(name: string, self: boolean): Phaser.GameObjects.Container {
-    const body = this.add
-      .circle(0, 0, 12, self ? 0xffce4f : 0x6fb7ff)
-      .setStrokeStyle(3, 0x2a2540);
     const shadow = this.add.ellipse(0, 14, 26, 10, 0x000000, 0.18);
+    const body = this.add.circle(0, 0, 12, self ? 0xffce4f : 0x6fb7ff).setStrokeStyle(3, 0x2a2540);
     const label = this.add
       .text(0, -26, name, {
         fontFamily: "Nunito, sans-serif",
@@ -204,7 +434,6 @@ export class IslandScene extends Phaser.Scene {
         if (!isLand(tx, ty)) continue;
         const x = tx * TILE;
         const y = ty * TILE;
-
         if (isPond(tx, ty)) {
           g.fillStyle(0x4ea3e0, 1);
           g.fillRect(x, y, TILE, TILE);
@@ -212,17 +441,12 @@ export class IslandScene extends Phaser.Scene {
           g.fillRect(x + 6, y + 6, TILE - 12, 6);
           continue;
         }
-
-        // Grass with a subtle checker.
         g.fillStyle(((tx + ty) & 1) === 0 ? 0x6cc05f : 0x63b657, 1);
         g.fillRect(x, y, TILE, TILE);
-
-        // Top highlight where the tile above is sky.
         if (!isLand(tx, ty - 1)) {
           g.fillStyle(0x82d172, 1);
           g.fillRect(x, y, TILE, 4);
         }
-        // Cliff/underside where the tile below is sky → floating-island look.
         if (!isLand(tx, ty + 1)) {
           g.fillStyle(0x8a5a3c, 1);
           g.fillRect(x, y + TILE - 12, TILE, 12);
@@ -233,7 +457,6 @@ export class IslandScene extends Phaser.Scene {
     }
   }
 
-  /** Light gold outline around the starter parcel so spawn reads as "yours". */
   private buildParcelHints(): void {
     const owned = generateParcels().find((p) => p.owner === "you");
     if (!owned || owned.tiles.length === 0) return;
