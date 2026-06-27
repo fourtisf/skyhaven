@@ -13,9 +13,13 @@
     "@fastify/cors": "^9.0.1",
     "@volari/config": "workspace:*",
     "@volari/db": "workspace:*",
-    "fastify": "^4.28.1"
+    "bs58": "^6.0.0",
+    "fastify": "^4.28.1",
+    "jsonwebtoken": "^9.0.2",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.6",
     "pino-pretty": "^11.2.2",
     "tsx": "^4.16.2",
     "typescript": "^5.4.5"

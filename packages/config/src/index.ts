@@ -38,6 +38,13 @@ const EnvSchema = z.object({
     .string()
     .default("postgresql://volari:volari@localhost:5432/volari?schema=public"),
   REDIS_URL: z.string().default("redis://localhost:6379"),
+
+  // Auth (Phase 5/6 wallet login). Override in production.
+  AUTH_SECRET: z.string().default("dev-insecure-secret-change-me"),
+  AUTH_TOKEN_TTL: z.string().default("7d"),
+
+  // Solana (Phase 6). Devnet until Phase 7 is reviewed (§10).
+  SOLANA_CLUSTER: z.enum(["devnet", "mainnet-beta"]).default("devnet"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

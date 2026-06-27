@@ -2,6 +2,7 @@ import cors from "@fastify/cors";
 import { env } from "@volari/config";
 import { checkDatabase, checkRedis, disconnect } from "@volari/db";
 import Fastify from "fastify";
+import { registerAuthRoutes } from "./auth.js";
 
 const app = Fastify({
   logger: {
@@ -26,8 +27,11 @@ app.get("/health/ready", async (_req, reply) => {
   return { status: ready ? "ready" : "degraded", service: "api", deps: { db, redis } };
 });
 
-// ── Phase 0: no game routes yet. REST contract (auth, /shop, /profile,
-//    /sky/settle, /deed/mint-callback) lands in later phases per §4. ──
+// Wallet auth (Phase 5/6): nonce → signature verify → JWT session.
+registerAuthRoutes(app);
+
+// ── Still to come per §4: GET /shop, GET /profile/:wallet, POST /vola/settle,
+//    POST /deed/mint-callback (Helius webhook). ──
 
 const start = async () => {
   try {
