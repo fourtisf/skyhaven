@@ -12,6 +12,7 @@
   "dependencies": {
     "@volari/config": "workspace:*",
     "@volari/game-client": "workspace:*",
+    "@volari/world": "workspace:*",
     "next": "^14.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

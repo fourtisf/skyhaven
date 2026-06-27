@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap");
+
 * {
   margin: 0;
   padding: 0;
@@ -47,10 +49,193 @@ main {
 }
 
 .stage {
-  width: min(960px, 100%);
+  position: relative;
+  width: min(1100px, 100%);
   aspect-ratio: 16 / 10;
   border-radius: 16px;
   overflow: hidden;
   border: 2px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  user-select: none;
+  touch-action: none;
+}
+.canvas-host {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── HTML game overlay (mirrors the prototype) ── */
+.hud-chips {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  max-width: 70%;
+  z-index: 10;
+}
+.chip {
+  background: rgba(255, 253, 246, 0.95);
+  border: 2px solid var(--edge, #e7dcc4);
+  border-radius: 13px;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "Fredoka", sans-serif;
+  font-weight: 600;
+  color: var(--ink, #2a2540);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.08);
+  font-size: 14px;
+}
+.chip b {
+  color: var(--gold-deep, #e0a52f);
+}
+.xpwrap {
+  position: absolute;
+  top: 46px;
+  left: 12px;
+  width: 150px;
+  height: 7px;
+  background: #ece2cb;
+  border-radius: 6px;
+  overflow: hidden;
+  z-index: 10;
+}
+.xpfill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffd966, #ff9f43);
+  transition: width 0.35s;
+}
+.minimap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 124px;
+  height: 92px;
+  border-radius: 11px;
+  border: 2px solid var(--edge, #e7dcc4);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.12);
+  background: #bfe6ff;
+  z-index: 10;
+}
+.topbtns {
+  position: absolute;
+  top: 110px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+}
+.uibtn {
+  font-family: "Fredoka", sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink, #2a2540);
+  background: rgba(255, 253, 246, 0.95);
+  border: 2px solid var(--edge, #e7dcc4);
+  border-radius: 12px;
+  padding: 7px 10px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+.uibtn:active {
+  transform: translateY(2px);
+}
+.quest-card {
+  position: absolute;
+  left: 10px;
+  bottom: 16px;
+  max-width: 250px;
+  background: rgba(255, 253, 246, 0.96);
+  border: 2px solid var(--edge, #e7dcc4);
+  border-left: 5px solid var(--gold, #ffce4f);
+  border-radius: 13px;
+  padding: 9px 12px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+.quest-card .qh {
+  font-family: "Fredoka", sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--gold-deep, #e0a52f);
+  text-transform: uppercase;
+}
+.quest-card .qt {
+  font-family: "Fredoka", sans-serif;
+  font-weight: 600;
+  color: var(--ink, #2a2540);
+  font-size: 15px;
+  line-height: 1.2;
+  margin-top: 1px;
+}
+.quest-card .qp {
+  font-size: 12px;
+  color: #9a8f78;
+  font-weight: 700;
+  margin-top: 3px;
+}
+.joystick {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  background: rgba(255, 253, 246, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  z-index: 11;
+  touch-action: none;
+}
+.joynub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-radius: 50%;
+  background: rgba(255, 253, 246, 0.95);
+  border: 2px solid var(--edge, #e7dcc4);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+}
+.actionbtn {
+  position: absolute;
+  right: 20px;
+  bottom: 24px;
+  min-width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #ffe08a, var(--gold, #ffce4f) 60%, var(--gold-deep, #e0a52f));
+  border: 3px solid #fff;
+  box-shadow: 0 5px 0 var(--gold-deep, #e0a52f);
+  font-family: "Fredoka", sans-serif;
+  font-weight: 700;
+  font-size: 26px;
+  color: var(--ink, #2a2540);
+  cursor: pointer;
+  z-index: 11;
+  padding: 0 14px;
+}
+.actionbtn:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 var(--gold-deep, #e0a52f);
+}
+.actionbtn .actlbl {
+  font-size: 15px;
+}
+.offline-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Fredoka", sans-serif;
+  color: #2a2540;
+  background: rgba(191, 230, 255, 0.4);
+  z-index: 12;
 }

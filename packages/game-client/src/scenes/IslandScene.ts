@@ -225,6 +225,17 @@ export class IslandScene extends Phaser.Scene {
       .setOrigin(0, 1);
     this.scale.on("resize", () => this.questBox.setY(this.scale.height - 70));
 
+    // HUD / quest / prompt now live in the HTML overlay — hide the in-canvas
+    // versions but keep computing them.
+    [this.hud, this.inv, this.status, this.prompt, this.questBox].forEach((o) =>
+      o.setVisible(false),
+    );
+    // Input + actions bridged from the overlay (joystick + buttons).
+    this.game.events.on("ui-action", () => this.fireAction());
+    this.game.events.on("ui-barn", () => this.togglePanel("shop"));
+    this.game.events.on("ui-market", () => this.togglePanel("market"));
+    this.game.events.on("ui-build", () => this.toggleDecor());
+
     void this.connect();
   }
 
@@ -265,9 +276,11 @@ export class IslandScene extends Phaser.Scene {
     const dy =
       (this.keys.up.isDown || this.cursors.up?.isDown ? -1 : 0) +
       (this.keys.down.isDown || this.cursors.down?.isDown ? 1 : 0);
-    let nx = dx;
-    let ny = dy;
-    const len = Math.hypot(dx, dy);
+    // Augment keyboard with the overlay joystick vector.
+    const joy = this.registry.get("joy") as { x: number; y: number } | undefined;
+    let nx = dx + (joy?.x ?? 0);
+    let ny = dy + (joy?.y ?? 0);
+    const len = Math.hypot(nx, ny);
     if (len > 1) {
       nx /= len;
       ny /= len;
@@ -289,6 +302,44 @@ export class IslandScene extends Phaser.Scene {
       this.stepLocal(nx, ny, dt);
       this.hud.setText("explore mode — connect a realtime server to farm");
     }
+    this.emitHud();
+  }
+
+  private lastHudAt = 0;
+  private emitHud(): void {
+    const now = Date.now();
+    if (now - this.lastHudAt < 120) return;
+    this.lastHudAt = now;
+    const room = this.room;
+    if (!this.online || !room) {
+      this.game.events.emit("hud", { online: false });
+      return;
+    }
+    const me = (room.state.players as SchemaMap<NetPlayer>).get(room.sessionId);
+    if (!me) return;
+    const step = me.questStep;
+    const q = step < ONBOARDING.length ? ONBOARDING[step] : undefined;
+    this.game.events.emit("hud", {
+      online: true,
+      coins: me.coins,
+      level: me.level,
+      xp: me.xp,
+      xpNext: xpForNext(me.level),
+      seeds: me.seeds,
+      feed: me.feed,
+      berries: me.berries,
+      eggs: me.eggs,
+      wool: me.wool,
+      goldwool: me.goldwool,
+      vola: me.volaPending,
+      quest: q
+        ? { label: q.label, hint: q.hint, step, total: ONBOARDING.length }
+        : { label: "All quests complete!", hint: "", step, total: ONBOARDING.length },
+      daily: { have: me.dailyHave, need: me.dailyNeed },
+      action: this.action?.label ?? "",
+      playerX: me.x,
+      playerY: me.y,
+    });
   }
 
   // ── movement ───────────────────────────────────────────────
