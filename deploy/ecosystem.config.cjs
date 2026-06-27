@@ -27,15 +27,17 @@ module.exports = {
     },
 
     // Authoritative game server (Phases 2–4). Currently DB-free (in-memory
-    // world + session state), so it runs standalone. Run via tsx because the
-    // shared @volari/* packages ship raw TypeScript (plain `node dist/index.js`
-    // won't resolve their TS entrypoints; a bundling step can replace this).
+    // world + session state), so it runs standalone. Run TS via tsx as a node
+    // loader (`node --import tsx src/index.ts`) — in-process, so PM2 tracks the
+    // real pid. NB: do NOT point PM2 at node_modules/.bin/tsx: that's a POSIX
+    // shell wrapper and `node` can't parse it (SyntaxError). The shared
+    // @volari/* packages ship raw TS, which is why we need tsx here.
     {
       name: "volari-realtime",
       cwd: `${ROOT}/apps/realtime`,
-      script: "node_modules/.bin/tsx",
+      script: "src/index.ts",
       interpreter: "node",
-      args: "src/index.ts",
+      node_args: "--import tsx",
       env: { NODE_ENV: "production", REALTIME_PORT: "2567" },
       autorestart: true,
       max_restarts: 10,
@@ -46,9 +48,9 @@ module.exports = {
     // {
     //   name: "volari-api",
     //   cwd: `${ROOT}/apps/api`,
-    //   script: "node_modules/.bin/tsx",
+    //   script: "src/index.ts",
     //   interpreter: "node",
-    //   args: "src/index.ts",
+    //   node_args: "--import tsx",
     //   env: { NODE_ENV: "production", API_PORT: "4000" },
     // },
   ],
