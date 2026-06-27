@@ -92,6 +92,51 @@ Now `https://volari.fun` serves the Volari scaffold landing page.
 
 ---
 
+## Make it playable — deploy the realtime server (Phases 2–4)
+
+The web alone is explore-only. To enable the full game (farming, animals,
+economy) point the web at the authoritative Colyseus server. It is DB-free
+today, so no Postgres is required yet.
+
+1. **DNS**: add an A record `rt.volari.fun → 187.77.120.136` (Hostinger hPanel).
+
+2. **Run it** (PM2 already includes `volari-realtime` via the ecosystem file):
+   ```bash
+   cd /var/www/volari && git pull && pnpm install
+   pm2 start deploy/ecosystem.config.cjs   # or: pm2 reload all
+   curl -s localhost:2567/health           # → {"status":"ok","service":"realtime"}
+   ```
+
+3. **nginx for wss** — create `/etc/nginx/sites-available/rt.volari.fun`:
+   ```nginx
+   server {
+       listen 80;
+       server_name rt.volari.fun;
+       location / {
+           proxy_pass http://127.0.0.1:2567;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection "upgrade";
+           proxy_set_header Host $host;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       }
+   }
+   ```
+   ```bash
+   ln -sf /etc/nginx/sites-available/rt.volari.fun /etc/nginx/sites-enabled/
+   nginx -t && systemctl reload nginx
+   certbot --nginx -d rt.volari.fun        # gives wss://
+   ```
+
+4. **Point the web at it** — set in `apps/web/.env` (or the web env), then rebuild:
+   ```bash
+   echo 'NEXT_PUBLIC_REALTIME_URL=wss://rt.volari.fun' >> .env
+   pnpm --filter @volari/web build && pm2 reload volari-web
+   ```
+
+`https://volari.fun` is now a fully playable island. Open it in two tabs to see
+multiplayer.
+
 ## Rollback
 
 ```bash

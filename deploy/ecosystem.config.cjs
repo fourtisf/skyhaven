@@ -26,11 +26,23 @@ module.exports = {
       time: true,
     },
 
-    // ── Enable from Phase 2 (needs PostgreSQL + Redis on the box) ──
-    // The shared @volari/* packages ship raw TypeScript, so run these with
-    // tsx in production (or add a bundling step) — plain `node dist/index.js`
-    // won't resolve the workspace TS entrypoints.
-    //
+    // Authoritative game server (Phases 2–4). Currently DB-free (in-memory
+    // world + session state), so it runs standalone. Run via tsx because the
+    // shared @volari/* packages ship raw TypeScript (plain `node dist/index.js`
+    // won't resolve their TS entrypoints; a bundling step can replace this).
+    {
+      name: "volari-realtime",
+      cwd: `${ROOT}/apps/realtime`,
+      script: "node_modules/.bin/tsx",
+      interpreter: "node",
+      args: "src/index.ts",
+      env: { NODE_ENV: "production", REALTIME_PORT: "2567" },
+      autorestart: true,
+      max_restarts: 10,
+      time: true,
+    },
+
+    // ── Fastify API — enable when REST endpoints are needed (Phase 4+) ──
     // {
     //   name: "volari-api",
     //   cwd: `${ROOT}/apps/api`,
@@ -38,14 +50,6 @@ module.exports = {
     //   interpreter: "node",
     //   args: "src/index.ts",
     //   env: { NODE_ENV: "production", API_PORT: "4000" },
-    // },
-    // {
-    //   name: "volari-realtime",
-    //   cwd: `${ROOT}/apps/realtime`,
-    //   script: "node_modules/.bin/tsx",
-    //   interpreter: "node",
-    //   args: "src/index.ts",
-    //   env: { NODE_ENV: "production", REALTIME_PORT: "2567" },
     // },
   ],
 };
