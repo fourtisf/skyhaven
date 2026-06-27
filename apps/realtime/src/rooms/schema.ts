@@ -24,6 +24,11 @@ export class Player extends Schema {
   @type("number") level = 1;
   @type("number") volaPending = 0; // off-chain $VOLA; on-chain settle is Phase 6
   @type("number") animalCap = 6;
+
+  // Phase 7 quests.
+  @type("number") questStep = 0; // index into ONBOARDING; === length when done
+  @type("number") dailyHave = 0;
+  @type("number") dailyNeed = 5;
 }
 
 /** A tilled/planted tile. Absent key = plain grass. Key = "worldX:worldY". */
@@ -73,4 +78,5 @@ export class IslandState extends Schema {
   @type({ map: Crop }) crops = new MapSchema<Crop>();
   @type({ map: Animal }) animals = new MapSchema<Animal>();
   @type({ map: Parcel }) parcels = new MapSchema<Parcel>();
+  @type({ map: "string" }) decor = new MapSchema<string>(); // "x:y" → emoji
 }

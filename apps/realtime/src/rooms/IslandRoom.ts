@@ -1,4 +1,5 @@
 import { Room, type Client } from "@colyseus/core";
+import { env } from "@volari/config";
 import {
   isLandPx,
   isPond,
@@ -8,26 +9,32 @@ import {
   WORLD_H,
   generateParcels,
   DEMO_TIMERS,
+  TIMERS,
   SELL_COINS,
   SELL_VOLA,
   SHOP_ITEMS,
   PREMIUM_ITEMS,
+  ONBOARDING,
+  DAILY,
+  DECOR_COST,
+  DECOR_TYPES,
   xpForNext,
   XP,
 } from "@volari/world";
 import { IslandState, Player, Crop, Animal, Parcel } from "./schema.js";
-import { recordLedger } from "../ledger.js";
+import { recordLedger, sumLedger } from "../ledger.js";
 import { mintDeed } from "../chain/deeds.js";
 import { transferVola } from "../chain/vola.js";
 
 const SPEED = 190; // px/sec — server-owned movement speed
 const TICK_HZ = 30;
+const STARTING_COINS = 55; // must match Player.coins default (reconciliation)
 const REACH = TILE * 1.6; // how close a player must be to act on a tile/animal
 const GOLDEN_WOOL_CHANCE = 0.08;
 
-// Phase 3 uses the prototype's demo-fast timers so the loop is playable in
-// seconds. Phase 7 rebalances to the production TIMERS (§8).
-const T = DEMO_TIMERS;
+// Demo-fast timers for dev/playtest; flip GAME_FAST_TIMERS=false for the §8
+// production timers (minutes/hours) before launch.
+const T = env.GAME_FAST_TIMERS ? DEMO_TIMERS : TIMERS;
 
 interface JoinOptions {
   name?: string;
@@ -57,6 +64,11 @@ interface ClaimMessage {
 interface SettleMessage {
   amount?: number;
 }
+interface DecorMessage {
+  x?: number;
+  y?: number;
+  decorType?: string;
+}
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -77,6 +89,8 @@ export class IslandRoom extends Room<IslandState> {
   override maxClients = 30;
   private animalSeq = 0;
   private tileParcel = new Map<string, number>(); // "x:y" → parcel index
+  private questFlags = new Map<string, Set<string>>(); // sessionId → flags
+  private rateLast = new Map<string, Map<string, number>>(); // anti-spam (§6)
 
   override onCreate(): void {
     this.setState(new IslandState());
@@ -96,18 +110,38 @@ export class IslandRoom extends Room<IslandState> {
       p.iny = dy;
     });
 
-    this.onMessage("till", (c, m: TileMessage) => this.onTill(c, m));
-    this.onMessage("plant", (c, m: TileMessage) => this.onPlant(c, m));
-    this.onMessage("water", (c, m: TileMessage) => this.onWater(c, m));
-    this.onMessage("harvestCrop", (c, m: TileMessage) => this.onHarvestCrop(c, m));
-    this.onMessage("harvestAnimal", (c, m: AnimalMessage) => this.onHarvestAnimal(c, m));
-    this.onMessage("feed", (c, m: AnimalMessage) => this.onFeed(c, m));
-    this.onMessage("sell", (c, m: SellMessage) => this.onSell(c, m));
-    this.onMessage("buy", (c, m: BuyMessage) => this.onBuy(c, m));
-    this.onMessage("claimPlot", (c, m: ClaimMessage) => this.onClaimPlot(c, m));
-    this.onMessage("settleVola", (c, m: SettleMessage) => this.onSettleVola(c, m));
+    // Mutating actions are rate-limited per session (anti-spam, §6).
+    this.onAction<TileMessage>("till", 60, (c, m) => this.onTill(c, m));
+    this.onAction<TileMessage>("plant", 60, (c, m) => this.onPlant(c, m));
+    this.onAction<TileMessage>("water", 60, (c, m) => this.onWater(c, m));
+    this.onAction<TileMessage>("harvestCrop", 60, (c, m) => this.onHarvestCrop(c, m));
+    this.onAction<AnimalMessage>("harvestAnimal", 60, (c, m) => this.onHarvestAnimal(c, m));
+    this.onAction<AnimalMessage>("feed", 60, (c, m) => this.onFeed(c, m));
+    this.onAction<SellMessage>("sell", 120, (c, m) => this.onSell(c, m));
+    this.onAction<BuyMessage>("buy", 120, (c, m) => this.onBuy(c, m));
+    this.onAction<ClaimMessage>("claimPlot", 250, (c, m) => this.onClaimPlot(c, m));
+    this.onAction<SettleMessage>("settleVola", 1000, (c, m) => this.onSettleVola(c, m));
+    this.onAction<DecorMessage>("placeDecor", 80, (c, m) => this.onPlaceDecor(c, m));
+    this.onAction<DecorMessage>("removeDecor", 80, (c, m) => this.onRemoveDecor(c, m));
 
     this.setSimulationInterval((dt) => this.tick(dt), 1000 / TICK_HZ);
+
+    // Periodic ledger reconciliation (§6): balances must equal their starting
+    // value plus the sum of audited deltas, else flag (and freeze, with a DB).
+    this.clock.setInterval(() => this.reconcile(), 30_000);
+  }
+
+  private reconcile(): void {
+    this.state.players.forEach((p, session) => {
+      const sums = sumLedger(session);
+      const expectedCoins = STARTING_COINS + sums.coins;
+      if (p.coins !== expectedCoins) {
+        console.warn(`[reconcile] FLAG ${session} coins=${p.coins} expected=${expectedCoins}`);
+      }
+      if (p.volaPending !== sums.vola) {
+        console.warn(`[reconcile] FLAG ${session} vola=${p.volaPending} expected=${sums.vola}`);
+      }
+    });
   }
 
   override onJoin(client: Client, options: JoinOptions = {}): void {
@@ -117,6 +151,7 @@ export class IslandRoom extends Room<IslandState> {
     p.name = (options.name ?? "Pilot").slice(0, 16);
     p.wallet = (options.wallet ?? "").slice(0, 64);
     this.state.players.set(client.sessionId, p);
+    this.questFlags.set(client.sessionId, new Set());
     this.grantStarterAnimals(client.sessionId);
   }
 
@@ -128,6 +163,85 @@ export class IslandRoom extends Room<IslandState> {
     }
     // Release their land back to claimable (no persistence yet).
     this.releaseParcels(client.sessionId);
+    this.questFlags.delete(client.sessionId);
+    this.rateLast.delete(client.sessionId);
+  }
+
+  // ── rate limiting + quests (Phase 7) ───────────────────────
+  private onAction<T>(msg: string, minMs: number, handler: (c: Client, m: T) => void): void {
+    this.onMessage(msg, (client, m: T) => {
+      if (!this.rateOk(client.sessionId, msg, minMs)) return;
+      handler(client, m);
+    });
+  }
+
+  private rateOk(sessionId: string, msg: string, minMs: number): boolean {
+    let m = this.rateLast.get(sessionId);
+    if (!m) {
+      m = new Map();
+      this.rateLast.set(sessionId, m);
+    }
+    const now = Date.now();
+    if (now - (m.get(msg) ?? 0) < minMs) return false;
+    m.set(msg, now);
+    return true;
+  }
+
+  private flagQuest(sessionId: string, flag: string): void {
+    const set = this.questFlags.get(sessionId);
+    const p = this.state.players.get(sessionId);
+    if (!set || !p) return;
+    set.add(flag);
+    while (p.questStep < ONBOARDING.length) {
+      const q = ONBOARDING[p.questStep];
+      if (!q || !set.has(q.flag)) break;
+      p.coins += q.rewardCoins;
+      this.grantXp(p, q.rewardXp);
+      recordLedger(sessionId, "QUEST", q.rewardCoins, 0, { quest: q.id });
+      p.questStep += 1;
+    }
+  }
+
+  private bumpDaily(sessionId: string): void {
+    const p = this.state.players.get(sessionId);
+    if (!p) return;
+    p.dailyHave += 1;
+    if (p.dailyHave >= p.dailyNeed) {
+      p.coins += DAILY.rewardCoins;
+      p.volaPending += DAILY.rewardVola;
+      recordLedger(sessionId, "QUEST", DAILY.rewardCoins, DAILY.rewardVola, { daily: DAILY.type });
+      p.dailyHave = 0;
+      p.dailyNeed += 2; // gently ramp the daily target
+    }
+  }
+
+  // ── decoration (Phase 7) ───────────────────────────────────
+  private onPlaceDecor(client: Client, m: DecorMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const tx = Math.floor(Number(m?.x));
+    const ty = Math.floor(Number(m?.y));
+    if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
+    if (!this.near(p, tx, ty)) return;
+    if (!this.ownsTile(client.sessionId, tx, ty)) return;
+    const key = tileKey(tx, ty);
+    if (this.state.crops.has(key) || this.state.decor.has(key)) return; // tile busy
+    if (p.coins < DECOR_COST) return;
+    let type = String(m?.decorType ?? "");
+    if (!(DECOR_TYPES as readonly string[]).includes(type)) type = DECOR_TYPES[0];
+    p.coins -= DECOR_COST;
+    this.state.decor.set(key, type);
+    recordLedger(client.sessionId, "BUY", -DECOR_COST, 0, { decor: type });
+    this.flagQuest(client.sessionId, "decorated");
+  }
+
+  private onRemoveDecor(client: Client, m: DecorMessage): void {
+    const tx = Math.floor(Number(m?.x));
+    const ty = Math.floor(Number(m?.y));
+    const key = tileKey(tx, ty);
+    if (!this.state.decor.has(key)) return;
+    if (!this.ownsTile(client.sessionId, tx, ty)) return;
+    this.state.decor.delete(key);
   }
 
   // ── farming intents ────────────────────────────────────────
@@ -171,6 +285,7 @@ export class IslandRoom extends Room<IslandState> {
     crop.plantedAt = now;
     crop.watered = false;
     crop.readyAt = now + T.cropUnwateredMs; // unwatered is slow until watered
+    this.flagQuest(client.sessionId, "planted");
   }
 
   private onWater(client: Client, m: TileMessage): void {
@@ -199,6 +314,8 @@ export class IslandRoom extends Room<IslandState> {
     p.berries += 1;
     this.grantXp(p, XP.harvestCrop);
     recordLedger(client.sessionId, "HARVEST", 0, 0, { item: "BERRY", qty: 1 });
+    this.flagQuest(client.sessionId, "harvested");
+    this.bumpDaily(client.sessionId);
     // Reset to tilled soil so it can be replanted.
     crop.state = "TILLED";
     crop.cropType = "";
@@ -227,6 +344,8 @@ export class IslandRoom extends Room<IslandState> {
     a.produceReadyAt = Date.now() + this.produceMs(a.type);
     this.grantXp(p, XP.harvestAnimal);
     recordLedger(client.sessionId, "HARVEST", 0, 0, { animal: a.type });
+    this.flagQuest(client.sessionId, "collected");
+    this.bumpDaily(client.sessionId);
   }
 
   private onFeed(client: Client, m: AnimalMessage): void {
@@ -263,6 +382,7 @@ export class IslandRoom extends Room<IslandState> {
     p.volaPending += volaDelta;
     this.grantXp(p, XP.sell * qty);
     recordLedger(client.sessionId, "SELL", coinDelta, volaDelta, { item, qty });
+    this.flagQuest(client.sessionId, "sold");
   }
 
   private onBuy(client: Client, m: BuyMessage): void {
@@ -434,6 +554,7 @@ export class IslandRoom extends Room<IslandState> {
     parcel.ownerName = p.name;
     this.grantXp(p, 15);
     recordLedger(client.sessionId, "CLAIM", -parcel.claimCost, 0, { parcel: parcel.index });
+    this.flagQuest(client.sessionId, "claimed");
 
     // Mint the Volari Deed cNFT without blocking the claim (§10).
     const wallet = p.wallet || client.sessionId;

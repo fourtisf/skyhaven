@@ -82,3 +82,30 @@ export const XP = {
   sell: 1,
   buyAnimal: 8,
 } as const;
+
+// ── Quests + decoration (Phase 7) ──────────────────────────────
+
+export interface QuestDef {
+  id: string;
+  label: string;
+  hint: string;
+  flag: string; // gameplay flag that completes it
+  rewardCoins: number;
+  rewardXp: number;
+}
+
+/** Onboarding chain — server validates completion from gameplay flags. */
+export const ONBOARDING: QuestDef[] = [
+  { id: "claim", label: "Claim a sky plot", hint: "Stand in a cyan plot and press E", flag: "claimed", rewardCoins: 0, rewardXp: 10 },
+  { id: "plant", label: "Plant your first seed", hint: "Till your land (E), then plant", flag: "planted", rewardCoins: 10, rewardXp: 5 },
+  { id: "harvest", label: "Harvest a crop", hint: "Water it, wait, then harvest", flag: "harvested", rewardCoins: 12, rewardXp: 5 },
+  { id: "animal", label: "Collect from an animal", hint: "Stand by your hen/sheep and press E", flag: "collected", rewardCoins: 10, rewardXp: 5 },
+  { id: "sell", label: "Sell at the Sky Market", hint: "Press M and sell goods", flag: "sold", rewardCoins: 8, rewardXp: 5 },
+  { id: "decorate", label: "Decorate your island", hint: "Press G on your land", flag: "decorated", rewardCoins: 15, rewardXp: 5 },
+];
+
+/** Daily quest reward (harvest N → coins + a little $VOLA). */
+export const DAILY = { type: "harvest", need: 5, rewardCoins: 25, rewardVola: 1 } as const;
+
+export const DECOR_COST = 20;
+export const DECOR_TYPES = ["🌷", "🌳", "🪵", "⛲", "🏺"] as const;

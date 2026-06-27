@@ -107,6 +107,6 @@ Phases are defined in [`docs/VOLARI_HANDOFF.md`](docs/VOLARI_HANDOFF.md) §9:
 - **Phase 4 — Economy, shop, market** ✅ — _playable core complete_
 - **Phase 5 — Land claim + Volari Deeds (cNFT) + ownership** ✅ _(mock mint until Helius)_
 - **Phase 6 — `$VOLA`: premium spend + settle** 🟡 _(in-game done; on-chain transfer + wallet-connect UI mocked/pending infra)_
-- Phase 7 — Quests, decoration, anti-cheat, polish
+- **Phase 7 — Quests, decoration, anti-cheat** ✅ _(reconciliation flags only; DB freeze pending persistence)_
 
 > ⚠️ Devnet only. No real `$VOLA` value or mainnet Volari Deeds until Phase 7 (anti-cheat + reconciliation) is reviewed.

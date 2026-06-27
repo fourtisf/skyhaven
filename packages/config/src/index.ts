@@ -43,6 +43,13 @@ const EnvSchema = z.object({
   AUTH_SECRET: z.string().default("dev-insecure-secret-change-me"),
   AUTH_TOKEN_TTL: z.string().default("7d"),
 
+  // Phase 7: demo-fast timers for dev/playtest; set false for §8 production
+  // (minutes/hours) before launch.
+  GAME_FAST_TIMERS: z
+    .union([z.boolean(), z.string()])
+    .default(true)
+    .transform((v) => v === true || v === "true" || v === "1"),
+
   // Solana (Phase 6). Devnet until Phase 7 is reviewed (§10). The settle/mint
   // flows mock themselves out when these are unset, so dev stays unblocked.
   SOLANA_CLUSTER: z.enum(["devnet", "mainnet-beta"]).default("devnet"),

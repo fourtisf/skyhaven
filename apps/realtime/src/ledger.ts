@@ -37,3 +37,15 @@ export function recordLedger(
 export function ledgerFor(userId: string): LedgerRecord[] {
   return entries.filter((e) => e.userId === userId);
 }
+
+/** Sum all coin/$VOLA deltas recorded for a user (for reconciliation). */
+export function sumLedger(userId: string): { coins: number; vola: number } {
+  let coins = 0;
+  let vola = 0;
+  for (const e of entries) {
+    if (e.userId !== userId) continue;
+    coins += e.coinDelta;
+    vola += e.volaDelta;
+  }
+  return { coins, vola };
+}

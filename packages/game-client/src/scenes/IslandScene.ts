@@ -14,6 +14,8 @@ import {
   PREMIUM_ITEMS,
   SELL_COINS,
   SELL_VOLA,
+  ONBOARDING,
+  DECOR_TYPES,
   xpForNext,
 } from "@volari/world";
 import { connectIsland } from "../net/room";
@@ -36,6 +38,9 @@ interface NetPlayer {
   level: number;
   volaPending: number;
   animalCap: number;
+  questStep: number;
+  dailyHave: number;
+  dailyNeed: number;
 }
 interface NetCrop {
   state: string;
@@ -91,6 +96,9 @@ export class IslandScene extends Phaser.Scene {
   private animalViews = new Map<string, Phaser.GameObjects.Container>();
   private parcelGfx!: Phaser.GameObjects.Graphics;
   private parcelLabels = new Map<number, Phaser.GameObjects.Text>();
+  private decorViews = new Map<string, Phaser.GameObjects.Text>();
+  private questBox!: Phaser.GameObjects.Text;
+  private decorIdx = 0;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<"up" | "down" | "left" | "right" | "act", Phaser.Input.Keyboard.Key>;
@@ -180,10 +188,25 @@ export class IslandScene extends Phaser.Scene {
     kb.on("keydown-E", () => this.fireAction());
     this.input.on("pointerdown", () => this.fireAction());
 
-    // Shop (Barn) / Market panels.
+    // Shop (Barn) / Market panels + build (decorate).
     kb.on("keydown-B", () => this.togglePanel("shop"));
     kb.on("keydown-M", () => this.togglePanel("market"));
+    kb.on("keydown-G", () => this.toggleDecor());
     kb.on("keydown-ESC", () => this.closePanels());
+
+    this.questBox = this.add
+      .text(10, this.scale.height - 70, "", {
+        fontFamily: "Fredoka, sans-serif",
+        fontSize: "13px",
+        color: "#2a2540",
+        backgroundColor: "rgba(255,253,246,0.92)",
+        padding: { x: 10, y: 6 },
+        wordWrap: { width: 240 },
+      })
+      .setScrollFactor(0)
+      .setDepth(5000)
+      .setOrigin(0, 1);
+    this.scale.on("resize", () => this.questBox.setY(this.scale.height - 70));
 
     void this.connect();
   }
@@ -233,6 +256,7 @@ export class IslandScene extends Phaser.Scene {
       this.syncFromServer();
       this.syncParcels();
       this.syncCrops();
+      this.syncDecor();
       this.syncAnimals();
       this.updateHud();
       this.computeAction();
@@ -469,6 +493,62 @@ export class IslandScene extends Phaser.Scene {
     this.inv.setText(
       `🌱 ${me.seeds}   🌾 ${me.feed}   🫐 ${me.berries}   🥚 ${me.eggs}   🧶 ${me.wool}   ✨ ${me.goldwool}`,
     );
+
+    const step = me.questStep;
+    const daily = `Daily: harvest ${me.dailyHave}/${me.dailyNeed}`;
+    if (step < ONBOARDING.length) {
+      const q = ONBOARDING[step];
+      this.questBox.setText(`✦ QUEST: ${q?.label ?? ""}\n${q?.hint ?? ""}\n${daily}`);
+    } else {
+      this.questBox.setText(`⭐ All quests complete!\n${daily}`);
+    }
+  }
+
+  // ── decoration (Phase 7) ───────────────────────────────────
+  private syncDecor(): void {
+    const room = this.room;
+    if (!room) return;
+    const decor = room.state.decor as
+      | { forEach: (cb: (v: string, key: string) => void) => void }
+      | undefined;
+    if (!decor) return;
+    const seen = new Set<string>();
+    decor.forEach((emoji, key) => {
+      seen.add(key);
+      let view = this.decorViews.get(key);
+      if (!view) {
+        const parts = key.split(":");
+        const tx = Number(parts[0]);
+        const ty = Number(parts[1]);
+        view = this.add
+          .text(tx * TILE + TILE / 2, ty * TILE + TILE / 2, emoji, { fontSize: "26px" })
+          .setOrigin(0.5)
+          .setDepth(3);
+        this.decorViews.set(key, view);
+      }
+      view.setText(emoji);
+    });
+    for (const [key, v] of this.decorViews) {
+      if (!seen.has(key)) {
+        v.destroy();
+        this.decorViews.delete(key);
+      }
+    }
+  }
+
+  private toggleDecor(): void {
+    if (!this.online || !this.room || this.panelOpen) return;
+    const tx = Math.floor(this.localPos.x / TILE);
+    const ty = Math.floor(this.localPos.y / TILE);
+    const key = `${tx}:${ty}`;
+    const decor = this.room.state.decor as { get: (k: string) => string | undefined } | undefined;
+    if (decor?.get(key)) {
+      this.room.send("removeDecor", { x: tx, y: ty });
+    } else {
+      const type = DECOR_TYPES[this.decorIdx % DECOR_TYPES.length];
+      this.decorIdx += 1;
+      this.room.send("placeDecor", { x: tx, y: ty, decorType: type });
+    }
   }
 
   // ── shop + market panels ───────────────────────────────────
