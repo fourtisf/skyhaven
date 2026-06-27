@@ -73,10 +73,19 @@ export class Parcel extends Schema {
   @type("number") cy = 0;
 }
 
+/** A wild berry bush — forage when ready; it regrows on a timer. */
+export class Bush extends Schema {
+  @type("number") x = 0;
+  @type("number") y = 0;
+  @type("boolean") ready = true;
+  @type("number") readyAt = 0;
+}
+
 export class IslandState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Crop }) crops = new MapSchema<Crop>();
   @type({ map: Animal }) animals = new MapSchema<Animal>();
   @type({ map: Parcel }) parcels = new MapSchema<Parcel>();
   @type({ map: "string" }) decor = new MapSchema<string>(); // "x:y" → emoji
+  @type({ map: Bush }) bushes = new MapSchema<Bush>();
 }

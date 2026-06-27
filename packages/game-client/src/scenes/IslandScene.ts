@@ -70,6 +70,11 @@ interface NetAnimal {
   fed: boolean;
   hasProduce: boolean;
 }
+interface NetBush {
+  x: number;
+  y: number;
+  ready: boolean;
+}
 interface NetParcel {
   index: number;
   status: string;
@@ -105,6 +110,7 @@ export class IslandScene extends Phaser.Scene {
   private remotes = new Map<string, Phaser.GameObjects.Container>();
   private cropViews = new Map<string, Phaser.GameObjects.Container>();
   private animalViews = new Map<string, Phaser.GameObjects.Container>();
+  private bushViews = new Map<string, Phaser.GameObjects.Container>();
   private parcelGfx!: Phaser.GameObjects.Graphics;
   private parcelLabels = new Map<number, Phaser.GameObjects.Text>();
   private decorViews = new Map<string, Phaser.GameObjects.Text>();
@@ -301,6 +307,7 @@ export class IslandScene extends Phaser.Scene {
       this.syncCrops();
       this.syncDecor();
       this.syncAnimals();
+      this.syncBushes();
       this.updateHud();
       this.computeAction();
       this.checkJuice();
@@ -611,6 +618,67 @@ export class IslandScene extends Phaser.Scene {
     }
   }
 
+  // ── wild berry bushes (forage) ──
+  private syncBushes(): void {
+    const room = this.room;
+    if (!room) return;
+    const bushes = room.state.bushes as SchemaMap<NetBush> | undefined;
+    if (!bushes) return;
+    const seen = new Set<string>();
+    bushes.forEach((b, key) => {
+      seen.add(key);
+      let v = this.bushViews.get(key);
+      if (!v) {
+        v = this.makeBush();
+        v.setPosition(b.x, b.y);
+        this.bushViews.set(key, v);
+      }
+      if (v.getData("ready") !== b.ready) {
+        v.setData("ready", b.ready);
+        this.paintBush(v, b.ready);
+      }
+    });
+    for (const [key, v] of this.bushViews) {
+      if (!seen.has(key)) {
+        v.destroy();
+        this.bushViews.delete(key);
+      }
+    }
+  }
+
+  private makeBush(): Phaser.GameObjects.Container {
+    const shadow = this.add.ellipse(0, 9, 26, 9, 0x000000, 0.16);
+    const g = this.add.graphics();
+    const c = this.add.container(0, 0, [shadow, g]).setDepth(700);
+    c.setData("g", g);
+    c.setData("ready", null);
+    return c;
+  }
+
+  private paintBush(c: Phaser.GameObjects.Container, ready: boolean): void {
+    const g = c.getData("g") as Phaser.GameObjects.Graphics;
+    g.clear();
+    g.lineStyle(2, 0x2c2440, 0.85);
+    g.fillStyle(ready ? 0x4e9d4a : 0x3f7e3c, 1);
+    g.fillCircle(-6, 0, 9);
+    g.fillCircle(6, 0, 9);
+    g.fillCircle(0, -7, 9);
+    g.strokeCircle(-6, 0, 9);
+    g.strokeCircle(6, 0, 9);
+    g.strokeCircle(0, -7, 9);
+    if (ready) {
+      g.fillStyle(0x8e3bd6, 1);
+      for (const [ox, oy] of [
+        [-5, 2],
+        [5, 1],
+        [0, -4],
+        [-2, -8],
+      ] as const) {
+        g.fillCircle(ox, oy, 2.6);
+      }
+    }
+  }
+
   private makeAnimal(type: string): Phaser.GameObjects.Container {
     const shadow = this.add.ellipse(0, 12, 30, 10, 0x000000, 0.18);
     const g = this.add.graphics();
@@ -693,7 +761,17 @@ export class IslandScene extends Phaser.Scene {
         best = { msg: "feed", payload: { id }, label: "Feed" };
     });
 
-    // 2) Land claim, or farming on land you own.
+    // 2) Wild berry bush in reach.
+    if (!best) {
+      (room.state.bushes as SchemaMap<NetBush>).forEach((b, id) => {
+        if (best) return;
+        if (b.ready && Math.hypot(px - b.x, py - b.y) <= REACH) {
+          best = { msg: "forage", payload: { id }, label: "Forage 🫐" };
+        }
+      });
+    }
+
+    // 3) Land claim, or farming on land you own.
     const parcel = this.parcelAt(px, py);
     if (!best && parcel && parcel.status === "CLAIMABLE") {
       if (me.level >= parcel.requiredLevel) {

@@ -1,8 +1,11 @@
 import { Room, type Client } from "@colyseus/core";
 import { env } from "@volari/config";
 import {
+  isLand,
   isLandPx,
   isPond,
+  COLS,
+  ROWS,
   SPAWN,
   TILE,
   WORLD_W,
@@ -21,7 +24,7 @@ import {
   xpForNext,
   XP,
 } from "@volari/world";
-import { IslandState, Player, Crop, Animal, Parcel } from "./schema.js";
+import { IslandState, Player, Crop, Animal, Parcel, Bush } from "./schema.js";
 import { recordLedger, sumLedger } from "../ledger.js";
 import { mintDeed } from "../chain/deeds.js";
 import { transferVola } from "../chain/vola.js";
@@ -95,6 +98,7 @@ export class IslandRoom extends Room<IslandState> {
   override onCreate(): void {
     this.setState(new IslandState());
     this.seedParcels();
+    this.seedBushes();
 
     this.onMessage("move", (client, m: MoveMessage) => {
       const p = this.state.players.get(client.sessionId);
@@ -123,6 +127,7 @@ export class IslandRoom extends Room<IslandState> {
     this.onAction<SettleMessage>("settleVola", 1000, (c, m) => this.onSettleVola(c, m));
     this.onAction<DecorMessage>("placeDecor", 80, (c, m) => this.onPlaceDecor(c, m));
     this.onAction<DecorMessage>("removeDecor", 80, (c, m) => this.onRemoveDecor(c, m));
+    this.onAction<AnimalMessage>("forage", 60, (c, m) => this.onForage(c, m));
 
     this.setSimulationInterval((dt) => this.tick(dt), 1000 / TICK_HZ);
 
@@ -531,6 +536,36 @@ export class IslandRoom extends Room<IslandState> {
     }
   }
 
+  private seedBushes(): void {
+    let n = 0;
+    for (let ty = 2; ty < ROWS - 2 && n < 18; ty++) {
+      for (let tx = 2; tx < COLS - 2 && n < 18; tx++) {
+        if (!isLand(tx, ty) || isPond(tx, ty)) continue;
+        const h = Math.abs(Math.sin(tx * 73.1 + ty * 19.7) * 43758.5453) % 1;
+        if (h < 0.97) continue;
+        const b = new Bush();
+        b.x = tx * TILE + 28;
+        b.y = ty * TILE + 30;
+        b.ready = true;
+        b.readyAt = 0;
+        this.state.bushes.set(`b${n++}`, b);
+      }
+    }
+  }
+
+  private onForage(client: Client, m: AnimalMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const b = this.state.bushes.get(String(m?.id));
+    if (!b || !b.ready) return;
+    if (Math.hypot(p.x - b.x, p.y - b.y) > REACH) return;
+    p.berries += 2;
+    this.grantXp(p, 2);
+    b.ready = false;
+    b.readyAt = Date.now() + T.berryMs;
+    recordLedger(client.sessionId, "FORAGE", 0, 0, { berries: 2 });
+  }
+
   private ownsTile(sessionId: string, tx: number, ty: number): boolean {
     const idx = this.tileParcel.get(tileKey(tx, ty));
     if (idx === undefined) return false;
@@ -612,6 +647,10 @@ export class IslandRoom extends Room<IslandState> {
     this.state.animals.forEach((a) => {
       if (now >= a.hungerAt) a.fed = false;
       if (a.fed && !a.hasProduce && now >= a.produceReadyAt) a.hasProduce = true;
+    });
+
+    this.state.bushes.forEach((b) => {
+      if (!b.ready && now >= b.readyAt) b.ready = true;
     });
   }
 
