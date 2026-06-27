@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
-import { env } from "@skyhaven/config";
-import { checkDatabase, checkRedis, disconnect } from "@skyhaven/db";
+import { env } from "@volari/config";
+import { checkDatabase, checkRedis, disconnect } from "@volari/db";
 
 // Plain HTTP handler for health probes; Colyseus shares this server for WS.
 const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -45,7 +45,7 @@ const gameServer = new Server({
 
 gameServer
   .listen(env.REALTIME_PORT)
-  .then(() => console.log(`Skyhaven realtime listening on :${env.REALTIME_PORT}`))
+  .then(() => console.log(`Volari realtime listening on :${env.REALTIME_PORT}`))
   .catch((err) => {
     console.error(err);
     process.exit(1);

@@ -1,8 +1,8 @@
 {
-  "name": "skyhaven",
+  "name": "volari",
   "version": "0.0.0",
   "private": true,
-  "description": "Skyhaven — sky-farm GameFi. Server-authoritative monorepo (Next.js + Phaser + Colyseus + Fastify + Prisma).",
+  "description": "Volari — sky-farm GameFi. Server-authoritative monorepo (Next.js + Phaser + Colyseus + Fastify + Prisma).",
   "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": ">=20"
@@ -12,7 +12,7 @@
     "build": "pnpm run -r build",
     "lint": "pnpm run -r --if-present lint",
     "typecheck": "pnpm run -r --if-present typecheck",
-    "db:generate": "pnpm --filter @skyhaven/db generate",
+    "db:generate": "pnpm --filter @volari/db generate",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down"
   },

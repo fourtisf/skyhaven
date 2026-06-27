@@ -1,5 +1,14 @@
 # SKYHAVEN — Production Handoff for Claude Code
 
+> **Naming note (2026-06-27):** The project was renamed from the working name
+> **"Skyhaven" / `$SKY`** to **"Volari" / `$VOLA`** before Phase 1. Reason:
+> "Skyhaven" collided with an existing AR game (skyhaven.app) and an airport sim,
+> and the `$SKY` ticker is already used by Sky Protocol (the MakerDAO rebrand).
+> "Volari" (from *volare* — "to fly") had no game/token/brand collisions in
+> search. The body below is preserved as the **original historical spec** and
+> still refers to "Skyhaven"/`$SKY` throughout — read those as "Volari"/`$VOLA`.
+> Land NFTs ("Sky Deeds") are now **"Volari Deeds"**. Domain target: `volari.fun`.
+
 **For:** Michael
 **From:** ALFA (product/design) via Claude (prototype + spec)
 **Prototype:** `skyhaven.html` (single-file canvas, attach alongside this doc)

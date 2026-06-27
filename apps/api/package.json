@@ -1,5 +1,5 @@
 {
-  "name": "@skyhaven/api",
+  "name": "@volari/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
-    "@skyhaven/config": "workspace:*",
-    "@skyhaven/db": "workspace:*",
+    "@volari/config": "workspace:*",
+    "@volari/db": "workspace:*",
     "fastify": "^4.28.1"
   },
   "devDependencies": {

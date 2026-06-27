@@ -3,13 +3,13 @@ import Phaser from "phaser";
 /**
  * BootScene — Phase 0 placeholder.
  *
- * Draws the Skyhaven sky backdrop + a floating-island silhouette so the
+ * Draws the Volari sky backdrop + a floating-island silhouette so the
  * render pipeline (web shell → game-client → Phaser canvas) is proven
  * end-to-end. No game logic, no server connection yet.
  *
  * Phase 2 replaces this with the baked terrain + floating-island look and
  * a player that follows authoritative Colyseus state (see prototype
- * docs/skyhaven.html).
+ * docs/volari.html).
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -34,7 +34,7 @@ export class BootScene extends Phaser.Scene {
     island.fillTriangle(cx - 90, cy + 18, cx + 90, cy + 18, cx, cy + 120);
 
     this.add
-      .text(cx, cy - 110, "SKYHAVEN", {
+      .text(cx, cy - 110, "VOLARI", {
         fontFamily: "Fredoka, sans-serif",
         fontSize: "44px",
         color: "#2a2540",

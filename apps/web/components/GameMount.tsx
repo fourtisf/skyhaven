@@ -14,7 +14,7 @@ export default function GameMount() {
     let game: { destroy: (removeCanvas: boolean) => void } | undefined;
     let cancelled = false;
 
-    void import("@skyhaven/game-client").then(({ createGame }) => {
+    void import("@volari/game-client").then(({ createGame }) => {
       if (cancelled || !containerRef.current) return;
       game = createGame({ parent: containerRef.current });
     });

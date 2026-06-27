@@ -1,5 +1,5 @@
 {
-  "name": "@skyhaven/web",
+  "name": "@volari/web",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@skyhaven/config": "workspace:*",
-    "@skyhaven/game-client": "workspace:*",
+    "@volari/config": "workspace:*",
+    "@volari/game-client": "workspace:*",
     "next": "^14.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

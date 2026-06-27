@@ -1,5 +1,5 @@
 {
-  "name": "@skyhaven/db",
+  "name": "@volari/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
-    "@skyhaven/config": "workspace:*",
+    "@volari/config": "workspace:*",
     "ioredis": "^5.4.1"
   },
   "devDependencies": {

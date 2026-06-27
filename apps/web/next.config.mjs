@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   // Workspace packages ship raw TypeScript — let Next transpile them.
-  transpilePackages: ["@skyhaven/game-client", "@skyhaven/config"],
+  transpilePackages: ["@volari/game-client", "@volari/config"],
 };
 
 export default nextConfig;

@@ -17,10 +17,10 @@ importers:
       '@fastify/cors':
         specifier: ^9.0.1
         version: 9.0.1
-      '@skyhaven/config':
+      '@volari/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@skyhaven/db':
+      '@volari/db':
         specifier: workspace:*
         version: link:../../packages/db
       fastify:
@@ -45,10 +45,10 @@ importers:
       '@colyseus/ws-transport':
         specifier: ^0.15.0
         version: 0.15.3(@colyseus/core@0.15.57(@colyseus/schema@2.0.37))(@colyseus/schema@2.0.37)
-      '@skyhaven/config':
+      '@volari/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@skyhaven/db':
+      '@volari/db':
         specifier: workspace:*
         version: link:../../packages/db
     devDependencies:
@@ -61,10 +61,10 @@ importers:
 
   apps/web:
     dependencies:
-      '@skyhaven/config':
+      '@volari/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@skyhaven/game-client':
+      '@volari/game-client':
         specifier: workspace:*
         version: link:../../packages/game-client
       next:
@@ -108,7 +108,7 @@ importers:
       '@prisma/client':
         specifier: ^5.18.0
         version: 5.22.0(prisma@5.22.0)
-      '@skyhaven/config':
+      '@volari/config':
         specifier: workspace:*
         version: link:../config
       ioredis:

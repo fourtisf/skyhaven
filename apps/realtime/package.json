@@ -1,5 +1,5 @@
 {
-  "name": "@skyhaven/realtime",
+  "name": "@volari/realtime",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
   "dependencies": {
     "@colyseus/core": "^0.15.17",
     "@colyseus/ws-transport": "^0.15.0",
-    "@skyhaven/config": "workspace:*",
-    "@skyhaven/db": "workspace:*"
+    "@volari/config": "workspace:*",
+    "@volari/db": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.16.2",

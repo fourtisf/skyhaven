@@ -36,7 +36,7 @@ const EnvSchema = z.object({
 
   DATABASE_URL: z
     .string()
-    .default("postgresql://skyhaven:skyhaven@localhost:5432/skyhaven?schema=public"),
+    .default("postgresql://volari:volari@localhost:5432/volari?schema=public"),
   REDIS_URL: z.string().default("redis://localhost:6379"),
 });
 

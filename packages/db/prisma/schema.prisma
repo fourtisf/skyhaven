@@ -1,7 +1,7 @@
-// Skyhaven database schema.
+// Volari database schema.
 //
 // Phase 0 (scaffold): datasource + generator only — no domain models yet.
-// Phase 1 implements the full schema from docs/SKYHAVEN_HANDOFF.md §3
+// Phase 1 implements the full schema from docs/VOLARI_HANDOFF.md §3
 // (User, Parcel, Tile, Animal, InventoryItem, QuestProgress, LedgerEntry)
 // plus migrations and the world-grid seed.
 

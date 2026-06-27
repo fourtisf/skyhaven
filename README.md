@@ -1,8 +1,8 @@
-# Skyhaven
+# Volari
 
-Sky-farm GameFi — a re-theme of the Mootopia base. Working name **Skyhaven**, placeholder ticker **`$SKY`**.
+Sky-farm GameFi — a re-theme of the Mootopia base. Working name **Volari**, placeholder ticker **`$VOLA`**.
 
-> **Server-authoritative by design.** The client sends *intent*; the server decides *outcome*. Growth, hunger, balances, and ownership are all derived from server-stored timestamps. See [`docs/SKYHAVEN_HANDOFF.md`](docs/SKYHAVEN_HANDOFF.md) for the full spec and the prototype ([`docs/skyhaven.html`](docs/skyhaven.html)) for the visual/mechanics reference.
+> **Server-authoritative by design.** The client sends *intent*; the server decides *outcome*. Growth, hunger, balances, and ownership are all derived from server-stored timestamps. See [`docs/VOLARI_HANDOFF.md`](docs/VOLARI_HANDOFF.md) for the full spec and the prototype ([`docs/volari.html`](docs/volari.html)) for the visual/mechanics reference.
 
 This repo is built in phases (one per session). **Current status: Phase 0 — scaffold.** No game logic yet — just a running skeleton with health checks.
 
@@ -26,9 +26,9 @@ apps/
   api/        Fastify REST — /health, /health/ready
   realtime/   Colyseus server — /health, /health/ready, WS transport
 packages/
-  config/     @skyhaven/config — zod-validated env, shared by all services
-  db/         @skyhaven/db — lazy Prisma + Redis clients, health helpers
-  game-client/@skyhaven/game-client — Phaser 3 boot scene
+  config/     @volari/config — zod-validated env, shared by all services
+  db/         @volari/db — lazy Prisma + Redis clients, health helpers
+  game-client/@volari/game-client — Phaser 3 boot scene
 docs/         handoff spec + HTML prototype
 ```
 
@@ -51,7 +51,7 @@ pnpm db:generate
 pnpm dev
 ```
 
-Run a single service with pnpm filters, e.g. `pnpm --filter @skyhaven/api dev`.
+Run a single service with pnpm filters, e.g. `pnpm --filter @volari/api dev`.
 
 ## Health checks
 
@@ -77,15 +77,15 @@ so `pnpm dev` boots and serves liveness even before `pnpm infra:up`.
 
 ## Roadmap
 
-Phases are defined in [`docs/SKYHAVEN_HANDOFF.md`](docs/SKYHAVEN_HANDOFF.md) §9:
+Phases are defined in [`docs/VOLARI_HANDOFF.md`](docs/VOLARI_HANDOFF.md) §9:
 
 - **Phase 0 — Scaffold** ✅ (this commit)
 - Phase 1 — Prisma schema & world seed
 - Phase 2 — Authoritative IslandRoom + Phaser render
 - Phase 3 — Farming + animals (server timers)
 - Phase 4 — Economy, shop, market
-- Phase 5 — Land claim + Sky Deeds (cNFT) + neighbors
-- Phase 6 — `$SKY` token integration
+- Phase 5 — Land claim + Volari Deeds (cNFT) + neighbors
+- Phase 6 — `$VOLA` token integration
 - Phase 7 — Quests, decoration, anti-cheat, polish
 
-> ⚠️ Devnet only. No real `$SKY` value or mainnet Sky Deeds until Phase 7 (anti-cheat + reconciliation) is reviewed.
+> ⚠️ Devnet only. No real `$VOLA` value or mainnet Volari Deeds until Phase 7 (anti-cheat + reconciliation) is reviewed.

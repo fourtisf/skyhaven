@@ -9,7 +9,7 @@ export interface CreateGameOptions {
 }
 
 /**
- * Boot the Skyhaven Phaser game. Call this from the web shell on the client
+ * Boot the Volari Phaser game. Call this from the web shell on the client
  * side only (Phaser needs `window`); see apps/web for the dynamic, SSR-safe
  * mount.
  */

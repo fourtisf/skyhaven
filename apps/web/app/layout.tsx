@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Skyhaven",
+  title: "Volari",
   description: "Sky-farm GameFi — build your floating island.",
 };
 

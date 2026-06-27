@@ -1,4 +1,4 @@
-import { env } from "@skyhaven/config";
+import { env } from "@volari/config";
 import { Redis } from "ioredis";
 
 // ── Prisma ───────────────────────────────────────────────────

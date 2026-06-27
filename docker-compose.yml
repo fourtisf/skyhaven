@@ -1,32 +1,32 @@
-# Local infra for Skyhaven development.
+# Local infra for Volari development.
 # `pnpm infra:up` to start, `pnpm infra:down` to stop.
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: skyhaven-postgres
+    container_name: volari-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: skyhaven
-      POSTGRES_PASSWORD: skyhaven
-      POSTGRES_DB: skyhaven
+      POSTGRES_USER: volari
+      POSTGRES_PASSWORD: volari
+      POSTGRES_DB: volari
     ports:
       - "5432:5432"
     volumes:
-      - skyhaven-pgdata:/var/lib/postgresql/data
+      - volari-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U skyhaven"]
+      test: ["CMD-SHELL", "pg_isready -U volari"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: skyhaven-redis
+    container_name: volari-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
-      - skyhaven-redisdata:/data
+      - volari-redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -34,5 +34,5 @@ services:
       retries: 5
 
 volumes:
-  skyhaven-pgdata:
-  skyhaven-redisdata:
+  volari-pgdata:
+  volari-redisdata:

@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
-import { env } from "@skyhaven/config";
-import { checkDatabase, checkRedis, disconnect } from "@skyhaven/db";
+import { env } from "@volari/config";
+import { checkDatabase, checkRedis, disconnect } from "@volari/db";
 import Fastify from "fastify";
 
 const app = Fastify({
@@ -32,7 +32,7 @@ app.get("/health/ready", async (_req, reply) => {
 const start = async () => {
   try {
     await app.listen({ port: env.API_PORT, host: "0.0.0.0" });
-    app.log.info(`Skyhaven API listening on :${env.API_PORT}`);
+    app.log.info(`Volari API listening on :${env.API_PORT}`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
