@@ -1,9 +1,8 @@
-// Volari database schema.
+// Volari database schema — source of truth for all game state.
 //
-// Phase 0 (scaffold): datasource + generator only — no domain models yet.
-// Phase 1 implements the full schema from docs/VOLARI_HANDOFF.md §3
-// (User, Parcel, Tile, Animal, InventoryItem, QuestProgress, LedgerEntry)
-// plus migrations and the world-grid seed.
+// Phase 1 implements the full model from docs/VOLARI_HANDOFF.md §3.
+// Golden rule (§2): the server derives growth/hunger/produce/ownership from
+// these stored timestamps; the client never computes them.
 
 generator client {
   provider = "prisma-client-js"
@@ -12,4 +11,129 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  wallet     String   @unique
+  level      Int      @default(1)
+  xp         Int      @default(0)
+  coins      Int      @default(55) // off-chain soft currency
+  volaPending BigInt  @default(0)  // earned $VOLA not yet settled on-chain
+  feed       Int      @default(5)
+  seeds      Int      @default(6)
+  animalCap  Int      @default(6)
+  createdAt  DateTime @default(now())
+  lastSeen   DateTime @updatedAt
+
+  parcels   Parcel[]
+  animals   Animal[]
+  inventory InventoryItem[]
+  quest     QuestProgress?
+  ledger    LedgerEntry[]
+}
+
+model Parcel {
+  id            String       @id @default(cuid())
+  gridX         Int
+  gridY         Int
+  status        ParcelStatus @default(CLAIMABLE) // LOCKED | CLAIMABLE | OWNED | NPC
+  ownerId       String?
+  owner         User?        @relation(fields: [ownerId], references: [id])
+  npcName       String?
+  claimCost     Int          @default(0)
+  requiredLevel Int          @default(1)
+  deedAssetId   String? // Bubblegum cNFT asset id once claimed (Volari Deed)
+  tiles         Tile[]
+
+  @@unique([gridX, gridY])
+  @@index([ownerId])
+}
+
+enum ParcelStatus {
+  LOCKED
+  CLAIMABLE
+  OWNED
+  NPC
+}
+
+model Tile {
+  id       String @id @default(cuid())
+  parcelId String
+  parcel   Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  localX   Int
+  localY   Int
+  worldX   Int // absolute tile coord (gridX*PS + localX) — convenience for render/move
+  worldY   Int
+
+  // farming
+  state       TileState @default(GRASS) // GRASS | TILLED | PLANTED
+  cropType    String?
+  plantedAt   DateTime?
+  watered     Boolean   @default(false)
+  growSeconds Int? // resolved server-side; ready when plantedAt + growSeconds <= now
+
+  // decoration (mutually exclusive with crop)
+  decorType String?
+
+  @@unique([parcelId, localX, localY])
+  @@index([parcelId])
+}
+
+enum TileState {
+  GRASS
+  TILLED
+  PLANTED
+}
+
+model Animal {
+  id             String    @id @default(cuid())
+  ownerId        String
+  owner          User      @relation(fields: [ownerId], references: [id])
+  type           String // SHEEP | HEN | AURORA
+  premium        Boolean   @default(false)
+  x              Float
+  y              Float
+  fed            Boolean   @default(true)
+  hungerAt       DateTime // becomes hungry at this time
+  produceReadyAt DateTime?
+  hasProduce     Boolean   @default(false)
+
+  @@index([ownerId])
+}
+
+model InventoryItem {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  item   String // WOOL | EGG | BERRY | GOLDWOOL
+  qty    Int    @default(0)
+
+  @@unique([userId, item])
+}
+
+model QuestProgress {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id])
+  step         Int       @default(0) // onboarding chain index
+  flags        Json      @default("{}") // checked/harvested/planted/...
+  dailyType    String    @default("harvest")
+  dailyNeed    Int       @default(5)
+  dailyHave    Int       @default(0)
+  dailyResetAt DateTime?
+}
+
+model LedgerEntry {
+  // audit trail — REQUIRED for anti-cheat (§6)
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  kind      String // CLAIM | SELL | BUY | QUEST | HARVEST | VOLA_SETTLE ...
+  coinDelta Int      @default(0)
+  volaDelta BigInt   @default(0)
+  meta      Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

@@ -118,6 +118,9 @@ importers:
       prisma:
         specifier: ^5.18.0
         version: 5.22.0
+      tsx:
+        specifier: ^4.16.2
+        version: 4.22.4
       typescript:
         specifier: ^5.4.5
         version: 5.9.3

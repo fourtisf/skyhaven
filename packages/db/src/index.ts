@@ -1,6 +1,11 @@
 import { env } from "@volari/config";
 import { Redis } from "ioredis";
 
+// Deterministic world model + balance constants (shared with the seed and the
+// Phase 2 authoritative room).
+export * from "./world.js";
+export * from "./balance.js";
+
 // ── Prisma ───────────────────────────────────────────────────
 // Loaded lazily via dynamic import so this package stays importable even
 // before `prisma generate` has run (e.g. a fresh checkout running a health

@@ -85,8 +85,8 @@ so `pnpm dev` boots and serves liveness even before `pnpm infra:up`.
 
 Phases are defined in [`docs/VOLARI_HANDOFF.md`](docs/VOLARI_HANDOFF.md) §9:
 
-- **Phase 0 — Scaffold** ✅ (this commit)
-- Phase 1 — Prisma schema & world seed
+- **Phase 0 — Scaffold** ✅
+- **Phase 1 — Prisma schema & world seed** ✅
 - Phase 2 — Authoritative IslandRoom + Phaser render
 - Phase 3 — Farming + animals (server timers)
 - Phase 4 — Economy, shop, market
