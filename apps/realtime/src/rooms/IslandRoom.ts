@@ -11,12 +11,14 @@ import {
   SELL_COINS,
   SELL_VOLA,
   SHOP_ITEMS,
+  PREMIUM_ITEMS,
   xpForNext,
   XP,
 } from "@volari/world";
 import { IslandState, Player, Crop, Animal, Parcel } from "./schema.js";
 import { recordLedger } from "../ledger.js";
 import { mintDeed } from "../chain/deeds.js";
+import { transferVola } from "../chain/vola.js";
 
 const SPEED = 190; // px/sec — server-owned movement speed
 const TICK_HZ = 30;
@@ -51,6 +53,9 @@ interface BuyMessage {
 }
 interface ClaimMessage {
   parcelId?: number;
+}
+interface SettleMessage {
+  amount?: number;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -100,6 +105,7 @@ export class IslandRoom extends Room<IslandState> {
     this.onMessage("sell", (c, m: SellMessage) => this.onSell(c, m));
     this.onMessage("buy", (c, m: BuyMessage) => this.onBuy(c, m));
     this.onMessage("claimPlot", (c, m: ClaimMessage) => this.onClaimPlot(c, m));
+    this.onMessage("settleVola", (c, m: SettleMessage) => this.onSettleVola(c, m));
 
     this.setSimulationInterval((dt) => this.tick(dt), 1000 / TICK_HZ);
   }
@@ -262,7 +268,21 @@ export class IslandRoom extends Room<IslandState> {
   private onBuy(client: Client, m: BuyMessage): void {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
-    const item = SHOP_ITEMS.find((s) => s.id === String(m?.shopItemId));
+    const id = String(m?.shopItemId);
+
+    // Premium goods are priced in $VOLA (off-chain volaPending).
+    const premium = PREMIUM_ITEMS.find((s) => s.id === id);
+    if (premium) {
+      if (p.volaPending < premium.volaPrice) return;
+      if (this.countAnimals(client.sessionId) >= p.animalCap) return;
+      p.volaPending -= premium.volaPrice;
+      this.spawnAnimal(client.sessionId, premium.animalType, p.x, p.y);
+      this.grantXp(p, XP.buyAnimal);
+      recordLedger(client.sessionId, "BUY_PREMIUM", 0, -premium.volaPrice, { item: id });
+      return;
+    }
+
+    const item = SHOP_ITEMS.find((s) => s.id === id);
     if (!item) return;
     if (p.coins < item.price) return;
 
@@ -326,6 +346,32 @@ export class IslandRoom extends Room<IslandState> {
       if (a.owner === sessionId) n++;
     });
     return n;
+  }
+
+  // ── $VOLA settlement (Phase 6) ─────────────────────────────
+  private onSettleVola(client: Client, m: SettleMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const requested = Math.floor(Number(m?.amount));
+    const amount = Number.isFinite(requested) && requested > 0 ? requested : p.volaPending;
+    if (amount <= 0 || amount > p.volaPending) return;
+    if (!p.wallet) return; // must be a wallet-authed session to receive on-chain
+
+    // Debit pending first (optimistic), refund if the transfer fails (§6).
+    p.volaPending -= amount;
+    const wallet = p.wallet;
+    void transferVola(wallet, amount)
+      .then((res) => {
+        recordLedger(client.sessionId, "VOLA_SETTLE", 0, -amount, {
+          wallet,
+          signature: res.signature,
+          mock: res.mock,
+        });
+      })
+      .catch(() => {
+        const cur = this.state.players.get(client.sessionId);
+        if (cur) cur.volaPending += amount; // refund on failure
+      });
   }
 
   // ── land claim (Phase 5) ───────────────────────────────────

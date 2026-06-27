@@ -58,6 +58,19 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "sheep", label: "Sheep", kind: "animal", amount: 1, animalType: "SHEEP", price: 120 },
 ];
 
+export interface PremiumItem {
+  id: string;
+  label: string;
+  animalType: "AURORA";
+  amount: number;
+  volaPrice: number; // priced in $VOLA (off-chain volaPending; settle on-chain)
+}
+
+/** Premium catalog — bought with $VOLA (Golden Wool / milestone rewards). */
+export const PREMIUM_ITEMS: PremiumItem[] = [
+  { id: "aurora", label: "Aurora Sheep", animalType: "AURORA", amount: 1, volaPrice: 3 },
+];
+
 /** XP needed to advance FROM the given level. */
 export function xpForNext(level: number): number {
   return 60 + (level - 1) * 40;

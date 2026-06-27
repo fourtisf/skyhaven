@@ -11,6 +11,7 @@ import {
   isLandPx,
   isPond,
   SHOP_ITEMS,
+  PREMIUM_ITEMS,
   SELL_COINS,
   SELL_VOLA,
   xpForNext,
@@ -544,10 +545,19 @@ export class IslandScene extends Phaser.Scene {
 
   private buildShop(): Phaser.GameObjects.Container {
     const { panel, addRow } = this.panelShell("🏚️  Barn");
-    let y = -100;
+    let y = -104;
     for (const item of SHOP_ITEMS) {
       addRow(item.label, `${item.price} 🪙`, () => this.room?.send("buy", { shopItemId: item.id }), y);
-      y += 48;
+      y += 44;
+    }
+    for (const item of PREMIUM_ITEMS) {
+      addRow(
+        `${item.label}  ✦`,
+        `${item.volaPrice} 💎`,
+        () => this.room?.send("buy", { shopItemId: item.id }),
+        y,
+      );
+      y += 44;
     }
     return panel;
   }
@@ -564,7 +574,7 @@ export class IslandScene extends Phaser.Scene {
       WOOL: me?.wool ?? 0,
       GOLDWOOL: me?.goldwool ?? 0,
     };
-    let y = -100;
+    let y = -104;
     for (const item of Object.keys({ ...SELL_COINS, ...SELL_VOLA })) {
       const have = counts[item] ?? 0;
       const unit = SELL_COINS[item]
@@ -580,8 +590,19 @@ export class IslandScene extends Phaser.Scene {
         },
         y,
       );
-      y += 48;
+      y += 44;
     }
+    // Settle accrued $VOLA on-chain to the connected wallet.
+    const vola = me?.volaPending ?? 0;
+    addRow(
+      `Settle $VOLA → wallet`,
+      `${vola} 💎`,
+      () => {
+        if (vola > 0) this.room?.send("settleVola", {});
+        this.closePanels();
+      },
+      y + 8,
+    );
     return panel;
   }
 

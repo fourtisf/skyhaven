@@ -13,9 +13,12 @@
     "@colyseus/core": "^0.15.17",
     "@colyseus/schema": "^2.0.0",
     "@colyseus/ws-transport": "^0.15.0",
+    "@solana/spl-token": "^0.4.8",
+    "@solana/web3.js": "^1.95.3",
     "@volari/config": "workspace:*",
     "@volari/db": "workspace:*",
-    "@volari/world": "workspace:*"
+    "@volari/world": "workspace:*",
+    "bs58": "^6.0.0"
   },
   "devDependencies": {
     "tsx": "^4.16.2",

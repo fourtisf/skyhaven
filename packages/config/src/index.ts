@@ -43,8 +43,13 @@ const EnvSchema = z.object({
   AUTH_SECRET: z.string().default("dev-insecure-secret-change-me"),
   AUTH_TOKEN_TTL: z.string().default("7d"),
 
-  // Solana (Phase 6). Devnet until Phase 7 is reviewed (§10).
+  // Solana (Phase 6). Devnet until Phase 7 is reviewed (§10). The settle/mint
+  // flows mock themselves out when these are unset, so dev stays unblocked.
   SOLANA_CLUSTER: z.enum(["devnet", "mainnet-beta"]).default("devnet"),
+  SOLANA_RPC_URL: z.string().default("https://api.devnet.solana.com"),
+  VOLA_MINT: z.string().optional(), // $VOLA SPL mint address
+  VOLA_DECIMALS: z.coerce.number().int().min(0).max(18).default(9),
+  TREASURY_SECRET_KEY: z.string().optional(), // base58 treasury keypair secret
 });
 
 export type Env = z.infer<typeof EnvSchema>;
