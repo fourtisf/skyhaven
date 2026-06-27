@@ -16,7 +16,10 @@ export default function GameMount() {
 
     void import("@volari/game-client").then(({ createGame }) => {
       if (cancelled || !containerRef.current) return;
-      game = createGame({ parent: containerRef.current });
+      game = createGame({
+        parent: containerRef.current,
+        serverUrl: process.env.NEXT_PUBLIC_REALTIME_URL,
+      });
     });
 
     return () => {

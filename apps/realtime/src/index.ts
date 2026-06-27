@@ -3,6 +3,7 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { env } from "@volari/config";
 import { checkDatabase, checkRedis, disconnect } from "@volari/db";
+import { IslandRoom } from "./rooms/IslandRoom.js";
 
 // Plain HTTP handler for health probes; Colyseus shares this server for WS.
 const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -39,9 +40,9 @@ const gameServer = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
 });
 
-// ── Phase 0: no rooms yet. Phase 2 defines the authoritative IslandRoom
-//    (players, parcels, tiles, animals) loaded from Prisma per §2/§9. ──
-// gameServer.define("island", IslandRoom);
+// Authoritative island room (Phase 2). Players join here; movement is
+// validated and integrated server-side.
+gameServer.define("island", IslandRoom);
 
 gameServer
   .listen(env.REALTIME_PORT)

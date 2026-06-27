@@ -42,6 +42,9 @@ importers:
       '@colyseus/core':
         specifier: ^0.15.17
         version: 0.15.57(@colyseus/schema@2.0.37)
+      '@colyseus/schema':
+        specifier: ^2.0.0
+        version: 2.0.37
       '@colyseus/ws-transport':
         specifier: ^0.15.0
         version: 0.15.3(@colyseus/core@0.15.57(@colyseus/schema@2.0.37))(@colyseus/schema@2.0.37)
@@ -51,6 +54,9 @@ importers:
       '@volari/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@volari/world':
+        specifier: workspace:*
+        version: link:../../packages/world
     devDependencies:
       tsx:
         specifier: ^4.16.2
@@ -111,6 +117,9 @@ importers:
       '@volari/config':
         specifier: workspace:*
         version: link:../config
+      '@volari/world':
+        specifier: workspace:*
+        version: link:../world
       ioredis:
         specifier: ^5.4.1
         version: 5.11.1
@@ -127,9 +136,21 @@ importers:
 
   packages/game-client:
     dependencies:
+      '@volari/world':
+        specifier: workspace:*
+        version: link:../world
+      colyseus.js:
+        specifier: ^0.15.26
+        version: 0.15.28
       phaser:
         specifier: ^3.80.1
         version: 3.90.0
+    devDependencies:
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+
+  packages/world:
     devDependencies:
       typescript:
         specifier: ^5.4.5
@@ -533,6 +554,10 @@ packages:
   colorette@2.0.20:
     resolution: {integrity: sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w==}
 
+  colyseus.js@0.15.28:
+    resolution: {integrity: sha512-fJx/EcK4fQsugNviXpTD78bVXySutLprViAWy5qMuyhcU0MfeUuHfrlvUqI18dQUStGckvLggTC7EexmIyI+3g==}
+    engines: {node: '>= 12.x'}
+
   cookie@0.7.2:
     resolution: {integrity: sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==}
     engines: {node: '>= 0.6'}
@@ -637,6 +662,10 @@ packages:
 
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
+
+  httpie@2.0.0-next.13:
+    resolution: {integrity: sha512-KbKOnq8wt0hVEfteYCSnEsPgzaWxcVc4qZ4OaDU9mVOYLRo3XChjWs3MiuRgFu5y+4JDo7sDKdKzkAn1ljQYFA==}
+    engines: {node: '>=10'}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -1213,6 +1242,16 @@ snapshots:
 
   colorette@2.0.20: {}
 
+  colyseus.js@0.15.28:
+    dependencies:
+      '@colyseus/schema': 2.0.37
+      httpie: 2.0.0-next.13
+      tslib: 2.8.1
+      ws: 8.21.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   cookie@0.7.2: {}
 
   csstype@3.2.3: {}
@@ -1336,6 +1375,8 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   help-me@5.0.0: {}
+
+  httpie@2.0.0-next.13: {}
 
   ieee754@1.2.1: {}
 

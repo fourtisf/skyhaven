@@ -1,5 +1,5 @@
 {
-  "name": "@volari/game-client",
+  "name": "@volari/world",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,11 +10,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@volari/world": "workspace:*",
-    "colyseus.js": "^0.15.26",
-    "phaser": "^3.80.1"
   },
   "devDependencies": {
     "typescript": "^5.4.5"

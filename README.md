@@ -27,8 +27,9 @@ apps/
   realtime/   Colyseus server — /health, /health/ready, WS transport
 packages/
   config/     @volari/config — zod-validated env, shared by all services
-  db/         @volari/db — lazy Prisma + Redis clients, health helpers
-  game-client/@volari/game-client — Phaser 3 boot scene
+  world/      @volari/world — deterministic island model + balance (pure, shared)
+  db/         @volari/db — Prisma + Redis clients, seed, health helpers
+  game-client/@volari/game-client — Phaser 3 island scene + Colyseus client
 docs/         handoff spec + HTML prototype
 ```
 
@@ -87,7 +88,7 @@ Phases are defined in [`docs/VOLARI_HANDOFF.md`](docs/VOLARI_HANDOFF.md) §9:
 
 - **Phase 0 — Scaffold** ✅
 - **Phase 1 — Prisma schema & world seed** ✅
-- Phase 2 — Authoritative IslandRoom + Phaser render
+- **Phase 2 — Authoritative IslandRoom + Phaser render** ✅
 - Phase 3 — Farming + animals (server timers)
 - Phase 4 — Economy, shop, market
 - Phase 5 — Land claim + Volari Deeds (cNFT) + neighbors

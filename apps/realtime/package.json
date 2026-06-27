@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@colyseus/core": "^0.15.17",
+    "@colyseus/schema": "^2.0.0",
     "@colyseus/ws-transport": "^0.15.0",
     "@volari/config": "workspace:*",
-    "@volari/db": "workspace:*"
+    "@volari/db": "workspace:*",
+    "@volari/world": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.16.2",

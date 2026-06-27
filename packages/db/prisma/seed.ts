@@ -9,8 +9,7 @@
 // (requires `prisma generate` + a reachable DATABASE_URL).
 
 import { PrismaClient, ParcelStatus, TileState } from "@prisma/client";
-import { generateParcels, SPAWN, TILE } from "../src/world";
-import { TIMERS } from "../src/balance";
+import { generateParcels, SPAWN, TILE, TIMERS } from "@volari/world";
 
 const prisma = new PrismaClient();
 
