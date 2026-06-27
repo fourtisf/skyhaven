@@ -87,6 +87,15 @@ export const XP = {
   buyAnimal: 8,
 } as const;
 
+/** $VOLA payouts when a player first reaches a milestone level (progression). */
+export const LEVEL_MILESTONES: Record<number, number> = {
+  3: 2,
+  5: 5,
+  8: 12,
+  12: 25,
+  16: 50,
+};
+
 // ── Quests + decoration (Phase 7) ──────────────────────────────
 
 export interface QuestDef {

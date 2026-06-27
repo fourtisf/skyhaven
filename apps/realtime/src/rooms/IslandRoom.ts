@@ -21,6 +21,7 @@ import {
   DAILY,
   DECOR_COST,
   DECOR_TYPES,
+  LEVEL_MILESTONES,
   xpForNext,
   XP,
 } from "@volari/world";
@@ -430,7 +431,20 @@ export class IslandRoom extends Room<IslandState> {
       p.xp -= xpForNext(p.level);
       p.level += 1;
       p.animalCap += 1; // each level raises the animal cap a little
+      const reward = LEVEL_MILESTONES[p.level];
+      if (reward) {
+        p.volaPending += reward;
+        recordLedger(this.sessionOf(p), "MILESTONE", 0, reward, { level: p.level });
+      }
     }
+  }
+
+  private sessionOf(target: Player): string {
+    let id = "";
+    this.state.players.forEach((pl, key) => {
+      if (pl === target) id = key;
+    });
+    return id;
   }
 
   private itemCount(p: Player, item: string): number {
