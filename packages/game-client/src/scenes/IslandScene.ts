@@ -10,7 +10,6 @@ import {
   isLand,
   isLandPx,
   isPond,
-  generateParcels,
   SHOP_ITEMS,
   SELL_COINS,
   SELL_VOLA,
@@ -54,6 +53,21 @@ interface NetAnimal {
   fed: boolean;
   hasProduce: boolean;
 }
+interface NetParcel {
+  index: number;
+  status: string;
+  ownerSession: string;
+  ownerName: string;
+  npcName: string;
+  claimCost: number;
+  requiredLevel: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  cx: number;
+  cy: number;
+}
 type SchemaMap<T> = {
   forEach: (cb: (v: T, key: string) => void) => void;
   get: (key: string) => T | undefined;
@@ -74,6 +88,8 @@ export class IslandScene extends Phaser.Scene {
   private remotes = new Map<string, Phaser.GameObjects.Container>();
   private cropViews = new Map<string, Phaser.GameObjects.Container>();
   private animalViews = new Map<string, Phaser.GameObjects.Container>();
+  private parcelGfx!: Phaser.GameObjects.Graphics;
+  private parcelLabels = new Map<number, Phaser.GameObjects.Text>();
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<"up" | "down" | "left" | "right" | "act", Phaser.Input.Keyboard.Key>;
@@ -100,7 +116,7 @@ export class IslandScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
 
     this.buildTerrain();
-    this.buildParcelHints();
+    this.parcelGfx = this.add.graphics().setDepth(2);
 
     this.local = this.makeAvatar("You", true);
     this.local.setPosition(this.localPos.x, this.localPos.y);
@@ -214,6 +230,7 @@ export class IslandScene extends Phaser.Scene {
         this.lastSent = { dx: nx, dy: ny };
       }
       this.syncFromServer();
+      this.syncParcels();
       this.syncCrops();
       this.syncAnimals();
       this.updateHud();
@@ -398,8 +415,14 @@ export class IslandScene extends Phaser.Scene {
         best = { msg: "feed", payload: { id }, label: "Feed" };
     });
 
-    // 2) Tile under the player.
-    if (!best) {
+    // 2) Land claim, or farming on land you own.
+    const parcel = this.parcelAt(px, py);
+    if (!best && parcel && parcel.status === "CLAIMABLE") {
+      if (me.level >= parcel.requiredLevel) {
+        const cost = parcel.claimCost > 0 ? ` (${parcel.claimCost}🪙)` : "";
+        best = { msg: "claimPlot", payload: { parcelId: parcel.index }, label: `Claim plot${cost}` };
+      }
+    } else if (!best && parcel && parcel.status === "OWNED" && parcel.ownerSession === room.sessionId) {
       const tx = Math.floor(px / TILE);
       const ty = Math.floor(py / TILE);
       const key = `${tx}:${ty}`;
@@ -607,23 +630,81 @@ export class IslandScene extends Phaser.Scene {
     }
   }
 
-  private buildParcelHints(): void {
-    const owned = generateParcels().find((p) => p.owner === "you");
-    if (!owned || owned.tiles.length === 0) return;
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const t of owned.tiles) {
-      minX = Math.min(minX, t.worldX * TILE);
-      minY = Math.min(minY, t.worldY * TILE);
-      maxX = Math.max(maxX, t.worldX * TILE + TILE);
-      maxY = Math.max(maxY, t.worldY * TILE + TILE);
+  // ── parcels (Phase 5) ──────────────────────────────────────
+  private parcelAt(px: number, py: number): NetParcel | undefined {
+    const room = this.room;
+    if (!room) return undefined;
+    let found: NetParcel | undefined;
+    (room.state.parcels as SchemaMap<NetParcel>).forEach((p) => {
+      if (!found && px >= p.minX && px <= p.maxX && py >= p.minY && py <= p.maxY) found = p;
+    });
+    return found;
+  }
+
+  private syncParcels(): void {
+    const room = this.room;
+    if (!room) return;
+    const parcels = room.state.parcels as SchemaMap<NetParcel> | undefined;
+    if (!parcels) return;
+    const g = this.parcelGfx;
+    g.clear();
+    const me = (room.state.players as SchemaMap<NetPlayer>).get(room.sessionId);
+    const myLevel = me?.level ?? 1;
+    const pulse = 0.55 + 0.35 * Math.sin(Date.now() / 500);
+    const seen = new Set<number>();
+
+    parcels.forEach((p) => {
+      seen.add(p.index);
+      const w = p.maxX - p.minX - 6;
+      const h = p.maxY - p.minY - 6;
+      let color = 0x6ee1ff;
+      let alpha = pulse;
+      let label = "";
+      if (p.status === "OWNED") {
+        const mine = p.ownerSession === room.sessionId;
+        color = mine ? 0xffce4f : 0x6fb7ff;
+        alpha = 0.9;
+        label = mine ? "" : p.ownerName || "Pilot";
+      } else if (p.status === "NPC") {
+        color = 0xb07fe0;
+        alpha = 0.8;
+        label = p.npcName || "Neighbor";
+      } else {
+        // CLAIMABLE
+        const locked = myLevel < p.requiredLevel;
+        color = locked ? 0x9aa0aa : 0x6ee1ff;
+        label = locked ? `🔒 Lv ${p.requiredLevel}` : `✦ ${p.claimCost}🪙`;
+      }
+      g.lineStyle(3, color, alpha);
+      g.strokeRoundedRect(p.minX + 3, p.minY + 3, w, h, 10);
+
+      // Beacon / owner label.
+      let text = this.parcelLabels.get(p.index);
+      if (label) {
+        if (!text) {
+          text = this.add
+            .text(p.cx, p.cy, label, {
+              fontFamily: "Fredoka, sans-serif",
+              fontSize: "13px",
+              color: "#ffffff",
+              backgroundColor: "rgba(42,37,64,0.8)",
+              padding: { x: 6, y: 2 },
+            })
+            .setOrigin(0.5)
+            .setDepth(4);
+          this.parcelLabels.set(p.index, text);
+        }
+        text.setText(label).setPosition(p.cx, p.cy).setVisible(true);
+      } else if (text) {
+        text.setVisible(false);
+      }
+    });
+
+    for (const [idx, t] of this.parcelLabels) {
+      if (!seen.has(idx)) {
+        t.destroy();
+        this.parcelLabels.delete(idx);
+      }
     }
-    this.add
-      .graphics()
-      .lineStyle(3, 0xffce4f, 0.9)
-      .strokeRoundedRect(minX + 2, minY + 2, maxX - minX - 4, maxY - minY - 4, 10)
-      .setDepth(2);
   }
 }

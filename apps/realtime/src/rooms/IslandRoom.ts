@@ -14,8 +14,9 @@ import {
   xpForNext,
   XP,
 } from "@volari/world";
-import { IslandState, Player, Crop, Animal } from "./schema.js";
+import { IslandState, Player, Crop, Animal, Parcel } from "./schema.js";
 import { recordLedger } from "../ledger.js";
+import { mintDeed } from "../chain/deeds.js";
 
 const SPEED = 190; // px/sec — server-owned movement speed
 const TICK_HZ = 30;
@@ -48,6 +49,9 @@ interface SellMessage {
 interface BuyMessage {
   shopItemId?: string;
 }
+interface ClaimMessage {
+  parcelId?: number;
+}
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -67,9 +71,11 @@ function tileKey(tx: number, ty: number): string {
 export class IslandRoom extends Room<IslandState> {
   override maxClients = 30;
   private animalSeq = 0;
+  private tileParcel = new Map<string, number>(); // "x:y" → parcel index
 
   override onCreate(): void {
     this.setState(new IslandState());
+    this.seedParcels();
 
     this.onMessage("move", (client, m: MoveMessage) => {
       const p = this.state.players.get(client.sessionId);
@@ -93,6 +99,7 @@ export class IslandRoom extends Room<IslandState> {
     this.onMessage("feed", (c, m: AnimalMessage) => this.onFeed(c, m));
     this.onMessage("sell", (c, m: SellMessage) => this.onSell(c, m));
     this.onMessage("buy", (c, m: BuyMessage) => this.onBuy(c, m));
+    this.onMessage("claimPlot", (c, m: ClaimMessage) => this.onClaimPlot(c, m));
 
     this.setSimulationInterval((dt) => this.tick(dt), 1000 / TICK_HZ);
   }
@@ -113,6 +120,8 @@ export class IslandRoom extends Room<IslandState> {
     for (const [id, a] of this.state.animals) {
       if (a.owner === client.sessionId) this.state.animals.delete(id);
     }
+    // Release their land back to claimable (no persistence yet).
+    this.releaseParcels(client.sessionId);
   }
 
   // ── farming intents ────────────────────────────────────────
@@ -130,6 +139,7 @@ export class IslandRoom extends Room<IslandState> {
     if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
     if (!this.near(p, tx, ty)) return;
     if (!isLandPx(tx * TILE + 28, ty * TILE + 28) || isPond(tx, ty)) return;
+    if (!this.ownsTile(client.sessionId, tx, ty)) return; // farm only your land
     const key = tileKey(tx, ty);
     if (this.state.crops.has(key)) return; // already tilled/planted
     const crop = new Crop();
@@ -316,6 +326,107 @@ export class IslandRoom extends Room<IslandState> {
       if (a.owner === sessionId) n++;
     });
     return n;
+  }
+
+  // ── land claim (Phase 5) ───────────────────────────────────
+  private seedParcels(): void {
+    for (const wp of generateParcels()) {
+      const parcel = new Parcel();
+      parcel.index = wp.index;
+      parcel.claimCost = wp.claimCost;
+      parcel.requiredLevel = wp.requiredLevel;
+      if (wp.owner === "npc") {
+        parcel.status = "NPC";
+        parcel.npcName = wp.npcName ?? "Neighbor";
+        parcel.deedAssetId = `npc-deed-${wp.index}`;
+      } else {
+        // Both the starter parcel and the rest are claimable in the shared world.
+        parcel.status = "CLAIMABLE";
+      }
+      // Bounding box + centroid (px) for client borders/beacons.
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const t of wp.tiles) {
+        minX = Math.min(minX, t.worldX * TILE);
+        minY = Math.min(minY, t.worldY * TILE);
+        maxX = Math.max(maxX, t.worldX * TILE + TILE);
+        maxY = Math.max(maxY, t.worldY * TILE + TILE);
+        this.tileParcel.set(tileKey(t.worldX, t.worldY), wp.index);
+      }
+      parcel.minX = minX;
+      parcel.minY = minY;
+      parcel.maxX = maxX;
+      parcel.maxY = maxY;
+      parcel.cx = (minX + maxX) / 2;
+      parcel.cy = (minY + maxY) / 2;
+      this.state.parcels.set(String(wp.index), parcel);
+    }
+  }
+
+  private ownsTile(sessionId: string, tx: number, ty: number): boolean {
+    const idx = this.tileParcel.get(tileKey(tx, ty));
+    if (idx === undefined) return false;
+    const parcel = this.state.parcels.get(String(idx));
+    return Boolean(parcel && parcel.status === "OWNED" && parcel.ownerSession === sessionId);
+  }
+
+  private onClaimPlot(client: Client, m: ClaimMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const parcel = this.state.parcels.get(String(Math.floor(Number(m?.parcelId))));
+    if (!parcel || parcel.status !== "CLAIMABLE") return;
+    // Must be standing inside the parcel (anti-cheat).
+    if (p.x < parcel.minX || p.x > parcel.maxX || p.y < parcel.minY || p.y > parcel.maxY) return;
+    if (p.level < parcel.requiredLevel) return;
+    if (p.coins < parcel.claimCost) return;
+
+    p.coins -= parcel.claimCost;
+    parcel.status = "OWNED";
+    parcel.ownerSession = client.sessionId;
+    parcel.ownerName = p.name;
+    this.grantXp(p, 15);
+    recordLedger(client.sessionId, "CLAIM", -parcel.claimCost, 0, { parcel: parcel.index });
+
+    // Mint the Volari Deed cNFT without blocking the claim (§10).
+    const wallet = p.wallet || client.sessionId;
+    void mintDeed({
+      wallet,
+      parcelIndex: parcel.index,
+      gridX: Math.floor(parcel.cx / TILE),
+      gridY: Math.floor(parcel.cy / TILE),
+    })
+      .then((res) => {
+        // Only stamp the deed if the same player still owns it.
+        if (parcel.status === "OWNED" && parcel.ownerSession === client.sessionId) {
+          parcel.deedAssetId = res.assetId;
+        }
+      })
+      .catch(() => {
+        /* mint failure is non-fatal; ownership stands, deed reconciles later */
+      });
+  }
+
+  private releaseParcels(sessionId: string): void {
+    const owned = new Set<number>();
+    this.state.parcels.forEach((parcel) => {
+      if (parcel.ownerSession === sessionId) owned.add(parcel.index);
+    });
+    if (owned.size === 0) return;
+    // Clear crops on the freed tiles first…
+    for (const [key, crop] of this.state.crops) {
+      const idx = this.tileParcel.get(tileKey(crop.worldX, crop.worldY));
+      if (idx !== undefined && owned.has(idx)) this.state.crops.delete(key);
+    }
+    // …then revert the parcels to claimable.
+    this.state.parcels.forEach((parcel) => {
+      if (parcel.ownerSession !== sessionId) return;
+      parcel.status = "CLAIMABLE";
+      parcel.ownerSession = "";
+      parcel.ownerName = "";
+      parcel.deedAssetId = "";
+    });
   }
 
   // ── simulation ─────────────────────────────────────────────

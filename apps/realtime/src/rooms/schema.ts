@@ -49,8 +49,28 @@ export class Animal extends Schema {
   @type("boolean") hasProduce = false;
 }
 
+/** A land parcel. Ownership is authoritative; the deed is a Volari Deed cNFT. */
+export class Parcel extends Schema {
+  @type("number") index = 0;
+  @type("string") status = "CLAIMABLE"; // LOCKED | CLAIMABLE | OWNED | NPC
+  @type("string") ownerSession = "";
+  @type("string") ownerName = "";
+  @type("string") npcName = "";
+  @type("number") claimCost = 0;
+  @type("number") requiredLevel = 1;
+  @type("string") deedAssetId = "";
+  // Bounding box + centroid in pixels for client borders/beacons.
+  @type("number") minX = 0;
+  @type("number") minY = 0;
+  @type("number") maxX = 0;
+  @type("number") maxY = 0;
+  @type("number") cx = 0;
+  @type("number") cy = 0;
+}
+
 export class IslandState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Crop }) crops = new MapSchema<Crop>();
   @type({ map: Animal }) animals = new MapSchema<Animal>();
+  @type({ map: Parcel }) parcels = new MapSchema<Parcel>();
 }
