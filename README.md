@@ -53,6 +53,12 @@ pnpm dev
 
 Run a single service with pnpm filters, e.g. `pnpm --filter @volari/api dev`.
 
+## Deploy
+
+VPS deploy (web shell → `volari.fun` via nginx + PM2) is documented in
+[`deploy/DEPLOY.md`](deploy/DEPLOY.md). Phase 0 deploys the scaffold landing
+page only; api/realtime/PostgreSQL/Redis come from Phase 2.
+
 ## Health checks
 
 | Service | Liveness | Readiness (deps) |
