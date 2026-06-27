@@ -1,0 +1,23 @@
+{
+  "name": "@skyhaven/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@skyhaven/config": "workspace:*",
+    "@skyhaven/db": "workspace:*",
+    "fastify": "^4.28.1"
+  },
+  "devDependencies": {
+    "pino-pretty": "^11.2.2",
+    "tsx": "^4.16.2",
+    "typescript": "^5.4.5"
+  }
+}

@@ -1,0 +1,15 @@
+// Skyhaven database schema.
+//
+// Phase 0 (scaffold): datasource + generator only — no domain models yet.
+// Phase 1 implements the full schema from docs/SKYHAVEN_HANDOFF.md §3
+// (User, Parcel, Tile, Animal, InventoryItem, QuestProgress, LedgerEntry)
+// plus migrations and the world-grid seed.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

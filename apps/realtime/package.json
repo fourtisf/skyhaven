@@ -1,0 +1,22 @@
+{
+  "name": "@skyhaven/realtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@colyseus/core": "^0.15.17",
+    "@colyseus/ws-transport": "^0.15.0",
+    "@skyhaven/config": "workspace:*",
+    "@skyhaven/db": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.16.2",
+    "typescript": "^5.4.5"
+  }
+}
