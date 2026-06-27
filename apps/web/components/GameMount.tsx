@@ -40,6 +40,7 @@ export default function GameMount() {
   const [started, setStarted] = useState(false);
   const [hud, setHud] = useState<Hud>({ online: false });
   const [nub, setNub] = useState({ x: 0, y: 0 });
+  const [levelUp, setLevelUp] = useState<number | null>(null);
 
   // Boot the game only after "Start farming".
   useEffect(() => {
@@ -54,6 +55,10 @@ export default function GameMount() {
       }) as unknown as GameLike;
       gameRef.current = game;
       game.events.on("hud", (h: unknown) => setHud(h as Hud));
+      game.events.on("levelup", (lvl: unknown) => {
+        setLevelUp(lvl as number);
+        window.setTimeout(() => setLevelUp(null), 1800);
+      });
     });
     return () => {
       cancelled = true;
@@ -217,6 +222,13 @@ export default function GameMount() {
             {hud.action ? <span className="actlbl">{hud.action}</span> : "✦"}
           </button>
         </>
+      )}
+
+      {levelUp != null && (
+        <div className="levelup" key={levelUp}>
+          ⭐ LEVEL UP!
+          <span>Lv {levelUp}</span>
+        </div>
       )}
 
       {!hud.online && <div className="offline-note">Connecting to the island…</div>}

@@ -14,14 +14,18 @@ export const TIMERS = {
   berryMs: 45 * 60 * 1000, // §8: 30–60 min
 } as const;
 
-/** Prototype demo-fast values (≈60s loop) — for local testing only. */
+/**
+ * Demo/early-game timers — deliberately snappy so the loop is fun and rewarding
+ * (short waits = frequent payoffs). Phase 7 / GAME_FAST_TIMERS=false switches to
+ * the §8 production timers before launch.
+ */
 export const DEMO_TIMERS = {
-  henEggMs: 9_000,
-  sheepWoolMs: 12_000,
-  cropWateredMs: 15_000,
-  cropUnwateredMs: 43_000,
-  hungerMs: 34_000,
-  berryMs: 16_000,
+  henEggMs: 7_000,
+  sheepWoolMs: 10_000,
+  cropWateredMs: 8_000,
+  cropUnwateredMs: 22_000,
+  hungerMs: 50_000, // slower hunger = less nagging
+  berryMs: 12_000,
 } as const;
 
 export type Timers = typeof TIMERS;

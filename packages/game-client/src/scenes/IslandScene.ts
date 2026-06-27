@@ -303,11 +303,135 @@ export class IslandScene extends Phaser.Scene {
       this.syncAnimals();
       this.updateHud();
       this.computeAction();
+      this.checkJuice();
     } else {
       this.stepLocal(nx, ny, dt);
       this.hud.setText("explore mode — connect a realtime server to farm");
     }
     this.emitHud();
+  }
+
+  // ── juice: feedback that makes actions feel good ──
+  private prev?: {
+    coins: number;
+    berries: number;
+    eggs: number;
+    wool: number;
+    goldwool: number;
+    xp: number;
+    level: number;
+  };
+  private audio?: AudioContext;
+
+  private beep(freq: number, dur = 0.08, type: OscillatorType = "sine", vol = 0.18): void {
+    try {
+      if (!this.audio) this.audio = new AudioContext();
+      const ctx = this.audio;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.value = vol;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+      o.stop(ctx.currentTime + dur);
+    } catch {
+      /* audio not available */
+    }
+  }
+
+  private floatText(x: number, y: number, text: string, color: string): void {
+    const t = this.add
+      .text(x, y - 18, text, {
+        fontFamily: "Fredoka, sans-serif",
+        fontSize: "15px",
+        color,
+        fontStyle: "bold",
+        stroke: "#2a2540",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(2000);
+    this.tweens.add({
+      targets: t,
+      y: y - 56,
+      alpha: 0,
+      duration: 900,
+      ease: "Cubic.out",
+      onComplete: () => t.destroy(),
+    });
+  }
+
+  private burst(x: number, y: number, color: number, n = 12): void {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.28 + Math.random();
+      const sp = 30 + Math.random() * 60;
+      const c = this.add.circle(x, y, 3, color).setDepth(2000);
+      this.tweens.add({
+        targets: c,
+        x: x + Math.cos(a) * sp,
+        y: y + Math.sin(a) * sp,
+        alpha: 0,
+        scale: 0.2,
+        duration: 450 + Math.random() * 300,
+        onComplete: () => c.destroy(),
+      });
+    }
+  }
+
+  private checkJuice(): void {
+    const room = this.room;
+    if (!room) return;
+    const me = (room.state.players as SchemaMap<NetPlayer>).get(room.sessionId);
+    if (!me) return;
+    const cur = {
+      coins: me.coins,
+      berries: me.berries,
+      eggs: me.eggs,
+      wool: me.wool,
+      goldwool: me.goldwool,
+      xp: me.xp,
+      level: me.level,
+    };
+    const p = this.prev;
+    const x = this.localPos.x;
+    const y = this.localPos.y;
+    if (p) {
+      if (cur.coins > p.coins) {
+        this.floatText(x, y, `+${cur.coins - p.coins} 🪙`, "#ffd54a");
+        this.beep(680, 0.06, "square", 0.14);
+      } else if (cur.coins < p.coins) {
+        this.floatText(x, y, `${cur.coins - p.coins} 🪙`, "#ff8d6b");
+      }
+      if (cur.berries > p.berries) {
+        this.floatText(x, y - 14, `+${cur.berries - p.berries} 🫐`, "#c9a6ff");
+        this.beep(520, 0.07);
+      }
+      if (cur.eggs > p.eggs) {
+        this.floatText(x, y - 14, `+${cur.eggs - p.eggs} 🥚`, "#fff7e6");
+        this.beep(560, 0.07);
+      }
+      if (cur.wool > p.wool) {
+        this.floatText(x, y - 14, `+${cur.wool - p.wool} 🧶`, "#fff7e6");
+        this.beep(500, 0.07);
+      }
+      if (cur.goldwool > p.goldwool) {
+        this.floatText(x, y - 32, `✨ GOLDEN WOOL!`, "#ffd54a");
+        this.burst(x, y, 0xffd54a, 18);
+        this.beep(880, 0.12, "triangle", 0.2);
+        this.beep(1180, 0.14, "triangle", 0.15);
+      }
+      if (cur.level > p.level) {
+        this.burst(x, y, 0xffce4f, 22);
+        this.beep(660, 0.1, "triangle", 0.2);
+        this.beep(880, 0.1, "triangle", 0.2);
+        this.beep(1320, 0.16, "triangle", 0.18);
+        this.game.events.emit("levelup", cur.level);
+      }
+    }
+    this.prev = cur;
   }
 
   private lastHudAt = 0;
