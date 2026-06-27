@@ -7,7 +7,7 @@ export default function HomePage() {
   return (
     <main>
       <h1 className="brand">VOLARI</h1>
-      <p className="tag">Sky-farm GameFi — Phase 0 scaffold</p>
+      <p className="tag">Sky-farm GameFi — claim your island, farm, trade $VOLA</p>
       <GameMount />
     </main>
   );
