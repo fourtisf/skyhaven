@@ -753,16 +753,30 @@ export class IslandScene extends Phaser.Scene {
 
   // ── avatars + terrain ──────────────────────────────────────
   private makeAvatar(name: string, self: boolean): Phaser.GameObjects.Container {
-    const shadow = this.add.ellipse(0, 14, 26, 10, 0x000000, 0.18);
+    const shadow = this.add.ellipse(0, 15, 24, 9, 0x000000, 0.18);
     const g = this.add.graphics();
-    g.lineStyle(3, 0x2a2540, 1);
-    g.fillStyle(self ? 0xffce4f : 0x6fb7ff, 1);
-    g.fillCircle(0, 0, 12);
-    g.strokeCircle(0, 0, 12);
-    g.fillStyle(0xffffff, 0.5);
-    g.fillCircle(-3.5, -3.5, 3.5); // highlight
+    const shirt = self ? 0x3a6ea5 : 0x9a5bd0;
+    g.lineStyle(2.4, 0x2c2440, 1);
+    // legs
+    g.fillStyle(0x35507a, 1);
+    g.fillRect(-5, 6, 4, 8);
+    g.fillRect(1, 6, 4, 8);
+    // body / overalls
+    g.fillStyle(shirt, 1);
+    g.fillRoundedRect(-8, -4, 16, 14, 5);
+    g.strokeRoundedRect(-8, -4, 16, 14, 5);
+    // head
+    g.fillStyle(0xf2c79a, 1);
+    g.fillCircle(0, -10, 6);
+    g.strokeCircle(0, -10, 6);
+    // straw hat
+    g.fillStyle(0xe7c463, 1);
+    g.fillEllipse(0, -14, 22, 7);
+    g.strokeEllipse(0, -14, 22, 7);
+    g.fillStyle(0xd9ad44, 1);
+    g.fillEllipse(0, -16, 12, 8);
     const label = this.add
-      .text(0, -26, name, {
+      .text(0, -28, name, {
         fontFamily: "Nunito, sans-serif",
         fontSize: "12px",
         color: "#2a2540",
@@ -774,10 +788,26 @@ export class IslandScene extends Phaser.Scene {
     return this.add.container(0, 0, [shadow, g, label]).setDepth(1000);
   }
 
-  // Deterministic value-noise so every client bakes the same grass/flowers.
+  // Deterministic per-cell hash (for scattering flowers/tufts).
   private nz(a: number, b: number): number {
     const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
     return v - Math.floor(v);
+  }
+
+  // Smooth value-noise (bilinear) so grass shades form gentle blobs, not a
+  // per-tile checkerboard.
+  private snoise(x: number, y: number): number {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const xf = x - xi;
+    const yf = y - yi;
+    const tl = this.nz(xi, yi);
+    const tr = this.nz(xi + 1, yi);
+    const bl = this.nz(xi, yi + 1);
+    const br = this.nz(xi + 1, yi + 1);
+    const u = xf * xf * (3 - 2 * xf);
+    const v = yf * yf * (3 - 2 * yf);
+    return (tl * (1 - u) + tr * u) * (1 - v) + (bl * (1 - u) + br * u) * v;
   }
 
   private buildSky(): void {
@@ -862,8 +892,8 @@ export class IslandScene extends Phaser.Scene {
           g.fillRect(x, y, TILE + 1, 5);
           continue;
         }
-        const n = this.nz(tx, ty);
-        g.fillStyle(n > 0.62 ? 0x88d273 : n < 0.4 ? 0x5da94f : 0x73c162, 1);
+        const n = this.snoise(tx * 0.28, ty * 0.28);
+        g.fillStyle(n > 0.6 ? 0x82cf6e : n < 0.44 ? 0x64b257 : 0x74c463, 1);
         g.fillRect(x, y, TILE + 1, TILE + 1);
         if (!isLand(tx, ty - 1)) {
           g.fillStyle(0xc3f5af, 0.55);
