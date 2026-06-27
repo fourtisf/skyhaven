@@ -137,6 +137,7 @@ export class IslandScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor("#9fd4ff");
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+    this.cameras.main.setZoom(1.25); // closer, cozier view (sprites read bigger)
 
     this.buildSky();
     this.buildBackdrop();
@@ -291,6 +292,10 @@ export class IslandScene extends Phaser.Scene {
         this.room.send("move", { dx: nx, dy: ny });
         this.lastSent = { dx: nx, dy: ny };
       }
+      // Client-side prediction: move the local avatar immediately (same speed +
+      // collision as the server) so input feels instant; the server stays
+      // authoritative and corrects only on real divergence (see syncFromServer).
+      this.stepLocal(nx, ny, dt);
       this.syncFromServer();
       this.syncParcels();
       this.syncCrops();
@@ -360,17 +365,25 @@ export class IslandScene extends Phaser.Scene {
     players.forEach((p, key) => {
       seen.add(key);
       if (key === room.sessionId) {
-        this.localPos.x = p.x;
-        this.localPos.y = p.y;
-        this.local.setPosition(p.x, p.y);
+        // Reconcile prediction with the server: only snap if we've genuinely
+        // diverged (e.g. a rejected move), otherwise trust local prediction.
+        const d = Math.hypot(this.localPos.x - p.x, this.localPos.y - p.y);
+        if (d > 48) {
+          this.localPos.x = p.x;
+          this.localPos.y = p.y;
+          this.local.setPosition(p.x, p.y);
+        }
         return;
       }
       let c = this.remotes.get(key);
       if (!c) {
         c = this.makeAvatar(p.name || "Pilot", false);
         this.remotes.set(key, c);
+        c.setPosition(p.x, p.y);
       }
-      c.setPosition(p.x, p.y);
+      // Smoothly interpolate other players toward their server position.
+      c.x += (p.x - c.x) * 0.3;
+      c.y += (p.y - c.y) * 0.3;
     });
     for (const [key, c] of this.remotes) {
       if (!seen.has(key)) {
