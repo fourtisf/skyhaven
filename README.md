@@ -60,6 +60,20 @@ VPS deploy (web shell → `volari.fun` via nginx + PM2) is documented in
 [`deploy/DEPLOY.md`](deploy/DEPLOY.md). Phase 0 deploys the scaffold landing
 page only; api/realtime/PostgreSQL/Redis come from Phase 2.
 
+## Play (local)
+
+```bash
+pnpm install
+pnpm --filter @volari/realtime dev   # authoritative server on :2567
+pnpm --filter @volari/web dev        # open http://localhost:3000
+```
+
+Controls: **WASD / arrows** move · **E / tap** to till → plant → water →
+harvest, and feed / collect from animals · **B** Barn (buy seeds/feed/animals)
+· **M** Sky Market (sell goods) · **ESC** close. The realtime server is
+authoritative — the browser only sends intent. (Without a realtime server the
+site stays in explore-only mode.)
+
 ## Health checks
 
 | Service | Liveness | Readiness (deps) |
@@ -90,7 +104,7 @@ Phases are defined in [`docs/VOLARI_HANDOFF.md`](docs/VOLARI_HANDOFF.md) §9:
 - **Phase 1 — Prisma schema & world seed** ✅
 - **Phase 2 — Authoritative IslandRoom + Phaser render** ✅
 - **Phase 3 — Farming + animals (server timers)** ✅
-- Phase 4 — Economy, shop, market
+- **Phase 4 — Economy, shop, market** ✅ — _playable core complete_
 - Phase 5 — Land claim + Volari Deeds (cNFT) + neighbors
 - Phase 6 — `$VOLA` token integration
 - Phase 7 — Quests, decoration, anti-cheat, polish

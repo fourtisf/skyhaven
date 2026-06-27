@@ -10,13 +10,20 @@ export class Player extends Schema {
   @type("string") name = "";
   @type("string") wallet = "";
 
-  // Phase 3 inventory (Phase 4 turns these into coins/market/XP).
+  // Phase 3 inventory.
   @type("number") seeds = 6;
   @type("number") feed = 5;
   @type("number") berries = 0;
   @type("number") eggs = 0;
   @type("number") wool = 0;
   @type("number") goldwool = 0;
+
+  // Phase 4 economy + progression.
+  @type("number") coins = 55;
+  @type("number") xp = 0;
+  @type("number") level = 1;
+  @type("number") volaPending = 0; // off-chain $VOLA; on-chain settle is Phase 6
+  @type("number") animalCap = 6;
 }
 
 /** A tilled/planted tile. Absent key = plain grass. Key = "worldX:worldY". */

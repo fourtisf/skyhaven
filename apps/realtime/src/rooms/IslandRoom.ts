@@ -8,8 +8,14 @@ import {
   WORLD_H,
   generateParcels,
   DEMO_TIMERS,
+  SELL_COINS,
+  SELL_VOLA,
+  SHOP_ITEMS,
+  xpForNext,
+  XP,
 } from "@volari/world";
 import { IslandState, Player, Crop, Animal } from "./schema.js";
+import { recordLedger } from "../ledger.js";
 
 const SPEED = 190; // px/sec — server-owned movement speed
 const TICK_HZ = 30;
@@ -34,6 +40,13 @@ interface TileMessage {
 }
 interface AnimalMessage {
   id?: string;
+}
+interface SellMessage {
+  item?: string;
+  qty?: number;
+}
+interface BuyMessage {
+  shopItemId?: string;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -78,6 +91,8 @@ export class IslandRoom extends Room<IslandState> {
     this.onMessage("harvestCrop", (c, m: TileMessage) => this.onHarvestCrop(c, m));
     this.onMessage("harvestAnimal", (c, m: AnimalMessage) => this.onHarvestAnimal(c, m));
     this.onMessage("feed", (c, m: AnimalMessage) => this.onFeed(c, m));
+    this.onMessage("sell", (c, m: SellMessage) => this.onSell(c, m));
+    this.onMessage("buy", (c, m: BuyMessage) => this.onBuy(c, m));
 
     this.setSimulationInterval((dt) => this.tick(dt), 1000 / TICK_HZ);
   }
@@ -166,6 +181,8 @@ export class IslandRoom extends Room<IslandState> {
     if (!this.near(p, tx, ty)) return;
     if (Date.now() < crop.readyAt) return; // not ready — server decides
     p.berries += 1;
+    this.grantXp(p, XP.harvestCrop);
+    recordLedger(client.sessionId, "HARVEST", 0, 0, { item: "BERRY", qty: 1 });
     // Reset to tilled soil so it can be replanted.
     crop.state = "TILLED";
     crop.cropType = "";
@@ -192,6 +209,8 @@ export class IslandRoom extends Room<IslandState> {
     }
     a.hasProduce = false;
     a.produceReadyAt = Date.now() + this.produceMs(a.type);
+    this.grantXp(p, XP.harvestAnimal);
+    recordLedger(client.sessionId, "HARVEST", 0, 0, { animal: a.type });
   }
 
   private onFeed(client: Client, m: AnimalMessage): void {
@@ -204,6 +223,99 @@ export class IslandRoom extends Room<IslandState> {
     p.feed -= 1;
     a.fed = true;
     a.hungerAt = Date.now() + T.hungerMs;
+  }
+
+  // ── economy intents ────────────────────────────────────────
+  private onSell(client: Client, m: SellMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const item = String(m?.item ?? "");
+    const qty = Math.floor(Number(m?.qty));
+    if (!Number.isFinite(qty) || qty <= 0) return;
+
+    const have = this.itemCount(p, item);
+    if (have < qty) return;
+
+    const coinEach = SELL_COINS[item] ?? 0;
+    const volaEach = SELL_VOLA[item] ?? 0;
+    if (coinEach === 0 && volaEach === 0) return; // not sellable
+
+    this.setItemCount(p, item, have - qty);
+    const coinDelta = coinEach * qty;
+    const volaDelta = volaEach * qty;
+    p.coins += coinDelta;
+    p.volaPending += volaDelta;
+    this.grantXp(p, XP.sell * qty);
+    recordLedger(client.sessionId, "SELL", coinDelta, volaDelta, { item, qty });
+  }
+
+  private onBuy(client: Client, m: BuyMessage): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const item = SHOP_ITEMS.find((s) => s.id === String(m?.shopItemId));
+    if (!item) return;
+    if (p.coins < item.price) return;
+
+    if (item.kind === "animal") {
+      if (this.countAnimals(client.sessionId) >= p.animalCap) return; // cap check
+      p.coins -= item.price;
+      this.spawnAnimal(client.sessionId, item.animalType ?? "HEN", p.x, p.y);
+      this.grantXp(p, XP.buyAnimal);
+    } else {
+      p.coins -= item.price;
+      if (item.kind === "seeds") p.seeds += item.amount;
+      else p.feed += item.amount;
+    }
+    recordLedger(client.sessionId, "BUY", -item.price, 0, { shopItemId: item.id });
+  }
+
+  private grantXp(p: Player, amount: number): void {
+    p.xp += amount;
+    while (p.xp >= xpForNext(p.level)) {
+      p.xp -= xpForNext(p.level);
+      p.level += 1;
+      p.animalCap += 1; // each level raises the animal cap a little
+    }
+  }
+
+  private itemCount(p: Player, item: string): number {
+    switch (item) {
+      case "BERRY":
+        return p.berries;
+      case "EGG":
+        return p.eggs;
+      case "WOOL":
+        return p.wool;
+      case "GOLDWOOL":
+        return p.goldwool;
+      default:
+        return 0;
+    }
+  }
+
+  private setItemCount(p: Player, item: string, value: number): void {
+    switch (item) {
+      case "BERRY":
+        p.berries = value;
+        break;
+      case "EGG":
+        p.eggs = value;
+        break;
+      case "WOOL":
+        p.wool = value;
+        break;
+      case "GOLDWOOL":
+        p.goldwool = value;
+        break;
+    }
+  }
+
+  private countAnimals(sessionId: string): number {
+    let n = 0;
+    this.state.animals.forEach((a) => {
+      if (a.owner === sessionId) n++;
+    });
+    return n;
   }
 
   // ── simulation ─────────────────────────────────────────────
@@ -242,19 +354,20 @@ export class IslandRoom extends Room<IslandState> {
       .map((t) => ({ x: t.worldX * TILE + 28, y: t.worldY * TILE + 28 }))
       .sort((a, b) => Math.hypot(a.x - SPAWN.x, a.y - SPAWN.y) - Math.hypot(b.x - SPAWN.x, b.y - SPAWN.y))
       .slice(0, 2);
+    this.spawnAnimal(sessionId, "HEN", spots[0]?.x ?? SPAWN.x, spots[0]?.y ?? SPAWN.y);
+    this.spawnAnimal(sessionId, "SHEEP", spots[1]?.x ?? SPAWN.x, spots[1]?.y ?? SPAWN.y);
+  }
+
+  private spawnAnimal(sessionId: string, type: string, x: number, y: number): void {
     const now = Date.now();
-    const make = (type: string, spot: { x: number; y: number } | undefined) => {
-      const a = new Animal();
-      a.owner = sessionId;
-      a.type = type;
-      a.x = spot?.x ?? SPAWN.x;
-      a.y = spot?.y ?? SPAWN.y;
-      a.fed = true;
-      a.hungerAt = now + T.hungerMs;
-      a.produceReadyAt = now + this.produceMs(type);
-      this.state.animals.set(`a${this.animalSeq++}`, a);
-    };
-    make("HEN", spots[0]);
-    make("SHEEP", spots[1]);
+    const a = new Animal();
+    a.owner = sessionId;
+    a.type = type;
+    a.x = x;
+    a.y = y;
+    a.fed = true;
+    a.hungerAt = now + T.hungerMs;
+    a.produceReadyAt = now + this.produceMs(type);
+    this.state.animals.set(`a${this.animalSeq++}`, a);
   }
 }

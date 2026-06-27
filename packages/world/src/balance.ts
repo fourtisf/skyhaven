@@ -25,3 +25,47 @@ export const DEMO_TIMERS = {
 } as const;
 
 export type Timers = typeof TIMERS;
+
+// ── Economy (Phase 4) — server-owned prices. The client reads these for
+//    display only; the server is authoritative on every debit/credit. ──
+
+/** Sell value in coins for soft-currency goods (Sky Market). */
+export const SELL_COINS: Record<string, number> = {
+  BERRY: 4,
+  EGG: 6,
+  WOOL: 12,
+};
+
+/** Golden Wool is the only soft good that accrues $VOLA (§5), settled Phase 6. */
+export const SELL_VOLA: Record<string, number> = {
+  GOLDWOOL: 1,
+};
+
+export interface ShopItem {
+  id: string;
+  label: string;
+  kind: "seeds" | "feed" | "animal";
+  amount: number;
+  animalType?: "HEN" | "SHEEP";
+  price: number; // coins
+}
+
+/** Barn shop catalog. */
+export const SHOP_ITEMS: ShopItem[] = [
+  { id: "seeds5", label: "Seeds ×5", kind: "seeds", amount: 5, price: 20 },
+  { id: "feed5", label: "Feed ×5", kind: "feed", amount: 5, price: 15 },
+  { id: "hen", label: "Hen", kind: "animal", amount: 1, animalType: "HEN", price: 60 },
+  { id: "sheep", label: "Sheep", kind: "animal", amount: 1, animalType: "SHEEP", price: 120 },
+];
+
+/** XP needed to advance FROM the given level. */
+export function xpForNext(level: number): number {
+  return 60 + (level - 1) * 40;
+}
+
+export const XP = {
+  harvestCrop: 3,
+  harvestAnimal: 5,
+  sell: 1,
+  buyAnimal: 8,
+} as const;

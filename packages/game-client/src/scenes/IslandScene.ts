@@ -11,6 +11,10 @@ import {
   isLandPx,
   isPond,
   generateParcels,
+  SHOP_ITEMS,
+  SELL_COINS,
+  SELL_VOLA,
+  xpForNext,
 } from "@volari/world";
 import { connectIsland } from "../net/room";
 
@@ -27,6 +31,11 @@ interface NetPlayer {
   eggs: number;
   wool: number;
   goldwool: number;
+  coins: number;
+  xp: number;
+  level: number;
+  volaPending: number;
+  animalCap: number;
 }
 interface NetCrop {
   state: string;
@@ -71,9 +80,16 @@ export class IslandScene extends Phaser.Scene {
   private lastSent = { dx: 0, dy: 0 };
 
   private hud!: Phaser.GameObjects.Text;
+  private inv!: Phaser.GameObjects.Text;
   private status!: Phaser.GameObjects.Text;
   private prompt!: Phaser.GameObjects.Text;
   private action: PendingAction | null = null;
+
+  private shopPanel?: Phaser.GameObjects.Container;
+  private marketPanel?: Phaser.GameObjects.Container;
+  private get panelOpen(): boolean {
+    return Boolean(this.shopPanel?.visible || this.marketPanel?.visible);
+  }
 
   constructor() {
     super("island");
@@ -110,8 +126,18 @@ export class IslandScene extends Phaser.Scene {
       })
       .setScrollFactor(0)
       .setDepth(5000);
+    this.inv = this.add
+      .text(10, 42, "", {
+        fontFamily: "Nunito, sans-serif",
+        fontSize: "14px",
+        color: "#2a2540",
+        backgroundColor: "rgba(255,253,246,0.9)",
+        padding: { x: 10, y: 5 },
+      })
+      .setScrollFactor(0)
+      .setDepth(5000);
     this.status = this.add
-      .text(10, 44, "connecting…", {
+      .text(10, 74, "connecting…", {
         fontFamily: "Nunito, sans-serif",
         fontSize: "12px",
         color: "#2a2540",
@@ -136,6 +162,11 @@ export class IslandScene extends Phaser.Scene {
     // E key or tap/click triggers the current contextual action.
     kb.on("keydown-E", () => this.fireAction());
     this.input.on("pointerdown", () => this.fireAction());
+
+    // Shop (Barn) / Market panels.
+    kb.on("keydown-B", () => this.togglePanel("shop"));
+    kb.on("keydown-M", () => this.togglePanel("market"));
+    kb.on("keydown-ESC", () => this.closePanels());
 
     void this.connect();
   }
@@ -397,6 +428,7 @@ export class IslandScene extends Phaser.Scene {
   }
 
   private fireAction(): void {
+    if (this.panelOpen) return; // clicks belong to the open panel
     if (this.online && this.room && this.action) {
       this.room.send(this.action.msg, this.action.payload);
     }
@@ -408,8 +440,126 @@ export class IslandScene extends Phaser.Scene {
     const me = (room.state.players as SchemaMap<NetPlayer>).get(room.sessionId);
     if (!me) return;
     this.hud.setText(
+      `🪙 ${me.coins}    ⭐ Lv ${me.level} (${me.xp}/${xpForNext(me.level)})    💎 ${me.volaPending}    ［B］Barn ［M］Market`,
+    );
+    this.inv.setText(
       `🌱 ${me.seeds}   🌾 ${me.feed}   🫐 ${me.berries}   🥚 ${me.eggs}   🧶 ${me.wool}   ✨ ${me.goldwool}`,
     );
+  }
+
+  // ── shop + market panels ───────────────────────────────────
+  private togglePanel(which: "shop" | "market"): void {
+    if (!this.online || !this.room) return;
+    const opening = which === "shop" ? !this.shopPanel?.visible : !this.marketPanel?.visible;
+    this.closePanels();
+    if (!opening) return;
+    if (which === "shop") this.shopPanel = this.buildShop();
+    else this.marketPanel = this.buildMarket();
+  }
+
+  private closePanels(): void {
+    this.shopPanel?.destroy();
+    this.shopPanel = undefined;
+    this.marketPanel?.destroy();
+    this.marketPanel = undefined;
+  }
+
+  private panelShell(title: string): {
+    panel: Phaser.GameObjects.Container;
+    addRow: (label: string, sub: string, onClick: () => void, y: number) => void;
+    width: number;
+  } {
+    const width = 300;
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height / 2;
+    const panel = this.add.container(cx, cy).setScrollFactor(0).setDepth(6000);
+    const bg = this.add
+      .rectangle(0, 0, width, 340, 0xfffdf6)
+      .setStrokeStyle(3, 0xe7dcc4)
+      .setInteractive(); // swallow clicks
+    const header = this.add
+      .text(0, -148, title, {
+        fontFamily: "Fredoka, sans-serif",
+        fontSize: "20px",
+        color: "#2a2540",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    const close = this.add
+      .text(width / 2 - 22, -150, "✕", { fontSize: "18px", color: "#9a8f78" })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    close.on("pointerdown", () => this.closePanels());
+    panel.add([bg, header, close]);
+
+    const addRow = (label: string, sub: string, onClick: () => void, y: number): void => {
+      const row = this.add
+        .rectangle(0, y, width - 30, 40, 0xf4eede)
+        .setStrokeStyle(1, 0xe7dcc4)
+        .setInteractive({ useHandCursor: true });
+      row.on("pointerdown", onClick);
+      const lt = this.add
+        .text(-width / 2 + 24, y, label, {
+          fontFamily: "Nunito, sans-serif",
+          fontSize: "15px",
+          color: "#2a2540",
+          fontStyle: "bold",
+        })
+        .setOrigin(0, 0.5);
+      const st = this.add
+        .text(width / 2 - 24, y, sub, {
+          fontFamily: "Nunito, sans-serif",
+          fontSize: "14px",
+          color: "#8a7f68",
+        })
+        .setOrigin(1, 0.5);
+      panel.add([row, lt, st]);
+    };
+
+    return { panel, addRow, width };
+  }
+
+  private buildShop(): Phaser.GameObjects.Container {
+    const { panel, addRow } = this.panelShell("🏚️  Barn");
+    let y = -100;
+    for (const item of SHOP_ITEMS) {
+      addRow(item.label, `${item.price} 🪙`, () => this.room?.send("buy", { shopItemId: item.id }), y);
+      y += 48;
+    }
+    return panel;
+  }
+
+  private buildMarket(): Phaser.GameObjects.Container {
+    const { panel, addRow } = this.panelShell("🛒  Sky Market");
+    const room = this.room;
+    const me = room
+      ? (room.state.players as SchemaMap<NetPlayer>).get(room.sessionId)
+      : undefined;
+    const counts: Record<string, number> = {
+      BERRY: me?.berries ?? 0,
+      EGG: me?.eggs ?? 0,
+      WOOL: me?.wool ?? 0,
+      GOLDWOOL: me?.goldwool ?? 0,
+    };
+    let y = -100;
+    for (const item of Object.keys({ ...SELL_COINS, ...SELL_VOLA })) {
+      const have = counts[item] ?? 0;
+      const unit = SELL_COINS[item]
+        ? `${SELL_COINS[item]} 🪙`
+        : `${SELL_VOLA[item]} 💎`;
+      addRow(
+        `${item} ×${have}`,
+        `sell all → ${unit}`,
+        () => {
+          if (have > 0) this.room?.send("sell", { item, qty: have });
+          this.togglePanel("market"); // refresh counts
+          this.togglePanel("market");
+        },
+        y,
+      );
+      y += 48;
+    }
+    return panel;
   }
 
   // ── avatars + terrain ──────────────────────────────────────
