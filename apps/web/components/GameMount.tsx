@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { COLS, ROWS, WORLD_W, WORLD_H, isLand, isPond } from "@volari/world";
 
-// Minimal shape of the Phaser game we use (avoids bundling Phaser types here).
 interface GameLike {
   events: {
     on: (e: string, cb: (...a: unknown[]) => void) => void;
@@ -37,10 +36,14 @@ export default function GameMount() {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<GameLike | null>(null);
   const miniRef = useRef<HTMLCanvasElement>(null);
+  const joyBaseRef = useRef<HTMLDivElement>(null);
+  const [started, setStarted] = useState(false);
   const [hud, setHud] = useState<Hud>({ online: false });
+  const [nub, setNub] = useState({ x: 0, y: 0 });
 
-  // Boot the game + subscribe to HUD updates.
+  // Boot the game only after "Start farming".
   useEffect(() => {
+    if (!started) return;
     let game: GameLike | undefined;
     let cancelled = false;
     void import("@volari/game-client").then(({ createGame }) => {
@@ -57,9 +60,9 @@ export default function GameMount() {
       game?.destroy(true);
       gameRef.current = null;
     };
-  }, []);
+  }, [started]);
 
-  // Bake the minimap island once.
+  // Bake the minimap island when it appears.
   useEffect(() => {
     const cv = miniRef.current;
     if (!cv) return;
@@ -75,7 +78,7 @@ export default function GameMount() {
         ctx.fillRect(tx * sx, ty * sy, sx + 0.6, sy + 0.6);
       }
     }
-  }, []);
+  }, [hud.online]);
 
   // Player dot on the minimap.
   useEffect(() => {
@@ -83,7 +86,6 @@ export default function GameMount() {
     if (!cv || hud.playerX == null) return;
     const ctx = cv.getContext("2d");
     if (!ctx) return;
-    // redraw is cheap; the baked island stays, just stamp the dot via overlay
     const x = (hud.playerX / WORLD_W) * cv.width;
     const y = ((hud.playerY ?? 0) / WORLD_H) * cv.height;
     ctx.save();
@@ -98,10 +100,8 @@ export default function GameMount() {
   }, [hud.playerX, hud.playerY]);
 
   const emit = (e: string) => gameRef.current?.events.emit(e);
+  const fmt = (n?: number) => (n ?? 0).toString();
 
-  // Joystick drag → movement vector in the game registry.
-  const joyBaseRef = useRef<HTMLDivElement>(null);
-  const [nub, setNub] = useState({ x: 0, y: 0 });
   const setJoy = (cx: number, cy: number) => {
     const base = joyBaseRef.current;
     if (!base) return;
@@ -122,15 +122,41 @@ export default function GameMount() {
     gameRef.current?.registry.set("joy", { x: 0, y: 0 });
   };
 
-  const fmt = (n?: number) => (n ?? 0).toString();
+  // ── Intro screen ──
+  if (!started) {
+    return (
+      <div className="game-root">
+        <div className="intro">
+          <div className="intro-clouds">
+            <span className="cloud c1" />
+            <span className="cloud c2" />
+            <span className="cloud c3" />
+            <span className="cloud c4" />
+            <span className="cloud c5" />
+          </div>
+          <div className="intro-pill">Sky-farm GameFi · $VOLA on devnet</div>
+          <h1 className="intro-title">Volari</h1>
+          <p className="intro-tag">
+            Claim the sky, raise cloud livestock, and tend your fields on floating islands.
+          </p>
+          <button className="start-btn" onClick={() => setStarted(true)}>
+            Start farming ✦
+          </button>
+          <p className="intro-hint">
+            Drag the stick (or WASD) to move · ✦ / E to interact · 🔨 build mode
+          </p>
+        </div>
+      </div>
+    );
+  }
 
+  // ── Game + overlay ──
   return (
-    <div className="stage">
+    <div className="game-root">
       <div ref={containerRef} className="canvas-host" />
 
       {hud.online && (
         <>
-          {/* top-left resource chips */}
           <div className="hud-chips">
             <div className="chip">🪙 <b>{fmt(hud.coins)}</b></div>
             <div className="chip">💎 <b>{fmt(hud.vola)}</b></div>
@@ -143,7 +169,6 @@ export default function GameMount() {
             <div className="chip">✨ {fmt(hud.goldwool)}</div>
           </div>
 
-          {/* XP bar */}
           <div className="xpwrap">
             <div
               className="xpfill"
@@ -151,10 +176,8 @@ export default function GameMount() {
             />
           </div>
 
-          {/* minimap */}
           <canvas ref={miniRef} width={124} height={92} className="minimap" />
 
-          {/* quest card */}
           {hud.quest && (
             <div className="quest-card">
               <div className="qh">
@@ -168,14 +191,12 @@ export default function GameMount() {
             </div>
           )}
 
-          {/* shop / market / build buttons */}
           <div className="topbtns">
             <button className="uibtn" onPointerDown={() => emit("ui-barn")}>🏚️ Barn</button>
             <button className="uibtn" onPointerDown={() => emit("ui-market")}>🛒 Market</button>
             <button className="uibtn" onPointerDown={() => emit("ui-build")}>🔨 Build</button>
           </div>
 
-          {/* joystick */}
           <div
             ref={joyBaseRef}
             className="joystick"
@@ -192,7 +213,6 @@ export default function GameMount() {
             <div className="joynub" style={{ transform: `translate(${nub.x}px, ${nub.y}px)` }} />
           </div>
 
-          {/* action button */}
           <button className="actionbtn" onPointerDown={() => emit("ui-action")}>
             {hud.action ? <span className="actlbl">{hud.action}</span> : "✦"}
           </button>

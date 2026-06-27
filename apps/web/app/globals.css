@@ -48,20 +48,113 @@ main {
   font-size: 16px;
 }
 
-.stage {
-  position: relative;
-  width: min(1100px, 100%);
-  aspect-ratio: 16 / 10;
-  border-radius: 16px;
+.game-root {
+  position: fixed;
+  inset: 0;
   overflow: hidden;
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  background: #bfe6ff;
   user-select: none;
   touch-action: none;
 }
 .canvas-host {
   position: absolute;
   inset: 0;
+}
+
+/* ── Intro / landing ── */
+.intro {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  padding: 24px;
+  background: linear-gradient(180deg, #a9e0ff, #cdeafe 45%, #ffe7c4);
+  overflow: hidden;
+}
+.intro-pill {
+  position: absolute;
+  top: 20px;
+  background: rgba(255, 255, 255, 0.45);
+  color: #fff;
+  font-family: "Fredoka", sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 20px;
+}
+.intro-title {
+  font-family: "Fredoka", sans-serif;
+  font-weight: 700;
+  font-size: clamp(56px, 11vw, 92px);
+  color: #fff;
+  text-shadow: 0 4px 0 #6fb7ff, 0 9px 20px rgba(0, 80, 160, 0.3);
+  letter-spacing: 0.5px;
+  z-index: 2;
+}
+.intro-tag {
+  font-family: "Fredoka", sans-serif;
+  font-weight: 600;
+  color: #3f6fa0;
+  font-size: clamp(15px, 2.4vw, 20px);
+  max-width: 480px;
+  line-height: 1.3;
+  margin-bottom: 10px;
+  z-index: 2;
+}
+.start-btn {
+  font-family: "Fredoka", sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  color: #2a2540;
+  background: var(--gold, #ffce4f);
+  border: none;
+  border-radius: 18px;
+  padding: 15px 44px;
+  box-shadow: 0 6px 0 var(--gold-deep, #e0a52f);
+  cursor: pointer;
+  z-index: 2;
+}
+.start-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 var(--gold-deep, #e0a52f);
+}
+.intro-hint {
+  font-family: "Fredoka", sans-serif;
+  font-weight: 600;
+  color: #5a86b0;
+  font-size: 14px;
+  margin-top: 16px;
+  z-index: 2;
+}
+.intro-clouds {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.cloud {
+  position: absolute;
+  width: 90px;
+  height: 34px;
+  background: #fff;
+  border-radius: 40px;
+  opacity: 0.85;
+  box-shadow: 30px 8px 0 -4px #fff, -28px 10px 0 -6px #fff, 8px -12px 0 -4px #fff;
+  animation: drift 18s ease-in-out infinite alternate;
+}
+.cloud.c1 { top: 18%; left: 12%; transform: scale(1.1); animation-duration: 22s; }
+.cloud.c2 { top: 28%; right: 14%; transform: scale(1.4); animation-duration: 26s; }
+.cloud.c3 { bottom: 24%; left: 8%; transform: scale(1.2); animation-duration: 20s; }
+.cloud.c4 { bottom: 16%; right: 10%; transform: scale(1.5); animation-duration: 28s; }
+.cloud.c5 { top: 46%; left: 44%; transform: scale(0.9); opacity: 0.6; animation-duration: 24s; }
+@keyframes drift {
+  from { margin-left: -26px; }
+  to { margin-left: 26px; }
 }
 
 /* ── HTML game overlay (mirrors the prototype) ── */
