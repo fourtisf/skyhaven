@@ -23,6 +23,17 @@ import { connectIsland } from "../net/room";
 const SPEED = 190; // px/sec — matches the server (offline fallback only)
 const REACH = TILE * 1.6;
 
+// Small seeded PRNG so the decorative paths bake identically every load.
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 interface NetPlayer {
   x: number;
   y: number;
@@ -101,6 +112,7 @@ export class IslandScene extends Phaser.Scene {
   private decorIdx = 0;
   private skyGfx!: Phaser.GameObjects.Graphics;
   private clouds: Phaser.GameObjects.Graphics[] = [];
+  private windmillBlades?: Phaser.GameObjects.Graphics;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<"up" | "down" | "left" | "right" | "act", Phaser.Input.Keyboard.Key>;
@@ -129,6 +141,7 @@ export class IslandScene extends Phaser.Scene {
     this.buildSky();
     this.buildBackdrop();
     this.buildTerrain();
+    this.buildVillage();
     this.parcelGfx = this.add.graphics().setDepth(2);
 
     this.local = this.makeAvatar("You", true);
@@ -244,6 +257,7 @@ export class IslandScene extends Phaser.Scene {
       c.x += 7 * dt;
       if (c.x > WORLD_W + 240) c.x = -240;
     }
+    if (this.windmillBlades) this.windmillBlades.rotation += dt * 0.9;
 
     const dx =
       (this.keys.left.isDown || this.cursors.left?.isDown ? -1 : 0) +
@@ -901,6 +915,224 @@ export class IslandScene extends Phaser.Scene {
     function x0(tx: number): number {
       return tx * TILE;
     }
+  }
+
+  // ── village: dirt paths + landmark buildings (ported from the prototype) ──
+  private buildVillage(): void {
+    const barn = this.nearestLandFree(24, 21);
+    const mkt = this.nearestLandFree(30, 21);
+    const wind = this.nearestLandFree(21, 25);
+    const bal = this.nearestLandFree(34, 15);
+
+    const rng = mulberry32(1337);
+    const path = new Set<string>();
+    this.carve(barn.x, barn.y + 2, mkt.x, mkt.y, path, rng);
+    this.carve(mkt.x, mkt.y + 2, wind.x, wind.y, path, rng);
+    this.paintPaths(path);
+
+    this.placeBuilding("barn", barn.x, barn.y, 2, 2);
+    this.placeBuilding("market", mkt.x, mkt.y, 2, 2);
+    this.placeBuilding("windmill", wind.x, wind.y, 1, 1);
+    this.placeBuilding("balloon", bal.x, bal.y, 1, 1);
+  }
+
+  private nearestLandFree(tx: number, ty: number): { x: number; y: number } {
+    for (let r = 0; r < 10; r++) {
+      for (let a = 0; a < 20; a++) {
+        const x = Math.round(tx + Math.cos((a / 20) * 6.28) * r);
+        const y = Math.round(ty + Math.sin((a / 20) * 6.28) * r);
+        if (isLand(x, y) && isLand(x + 1, y) && isLand(x, y + 1) && !isPond(x, y)) {
+          return { x, y };
+        }
+      }
+    }
+    return { x: tx, y: ty };
+  }
+
+  private carve(
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+    out: Set<string>,
+    rng: () => number,
+  ): void {
+    let x = ax;
+    let y = ay;
+    let guard = 0;
+    while ((x !== bx || y !== by) && guard++ < 400) {
+      if (isLand(x, y)) out.add(`${x}:${y}`);
+      if (rng() < 0.5) {
+        if (x < bx) x++;
+        else if (x > bx) x--;
+      } else {
+        if (y < by) y++;
+        else if (y > by) y--;
+      }
+    }
+    if (isLand(bx, by)) out.add(`${bx}:${by}`);
+  }
+
+  private paintPaths(path: Set<string>): void {
+    const g = this.add.graphics().setDepth(1);
+    g.fillStyle(0xc8a06a, 1);
+    path.forEach((key) => {
+      const parts = key.split(":");
+      const tx = Number(parts[0]);
+      const ty = Number(parts[1]);
+      const cx = tx * TILE + TILE / 2;
+      const cy = ty * TILE + TILE / 2;
+      g.fillCircle(cx, cy, TILE * 0.42);
+      for (const [dx, dy] of [
+        [1, 0],
+        [0, 1],
+      ] as const) {
+        if (path.has(`${tx + dx}:${ty + dy}`)) {
+          g.fillRect(
+            Math.min(cx, cx + dx * TILE) - TILE * 0.34,
+            Math.min(cy, cy + dy * TILE) - TILE * 0.34,
+            TILE * 0.68 + Math.abs(dx * TILE),
+            TILE * 0.68 + Math.abs(dy * TILE),
+          );
+        }
+      }
+    });
+  }
+
+  private placeBuilding(type: string, tx: number, ty: number, w: number, h: number): void {
+    const W = w * TILE;
+    const H = h * TILE;
+    const cx = tx * TILE + W / 2;
+    const cy = ty * TILE + H / 2;
+    const g = this.add.graphics().setDepth(5).setPosition(cx, cy);
+    g.fillStyle(0x28283c, 0.16);
+    g.fillEllipse(0, H / 2 - 6, W * 0.84, 24);
+    if (type === "barn") this.drawBarn(g, W, H);
+    else if (type === "market") this.drawMarket(g, W, H);
+    else if (type === "windmill") this.drawWindmill(g, cx, cy);
+    else this.drawBalloon(g);
+
+    const label = type === "barn" ? "BARN" : type === "market" ? "MARKET" : "";
+    if (label) {
+      this.add
+        .text(cx, cy + H * 0.5 + 6, label, {
+          fontFamily: "Fredoka, sans-serif",
+          fontSize: "11px",
+          color: "#2c2440",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+        .setDepth(6);
+    }
+    if (type === "market") {
+      this.add.text(cx, cy + H * 0.25, "☁️🥚🫐", { fontSize: "15px" }).setOrigin(0.5).setDepth(6);
+    }
+  }
+
+  private drawBarn(g: Phaser.GameObjects.Graphics, W: number, H: number): void {
+    const Wb = W * 0.78;
+    const Hb = H * 0.62;
+    const x = -Wb / 2;
+    const y = -Hb * 0.2;
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.fillStyle(0xe7563f, 1);
+    g.fillRoundedRect(x, y, Wb, Hb, 6);
+    g.strokeRoundedRect(x, y, Wb, Hb, 6);
+    g.fillStyle(0xb23a2c, 1);
+    g.fillTriangle(x - 8, y, x + Wb / 2, y - Hb * 0.5, x + Wb + 8, y);
+    g.strokeTriangle(x - 8, y, x + Wb / 2, y - Hb * 0.5, x + Wb + 8, y);
+    g.fillStyle(0xf3e6c8, 1);
+    g.fillRoundedRect(x + Wb / 2 - 12, y + Hb - 24, 24, 24, 3);
+    g.strokeRoundedRect(x + Wb / 2 - 12, y + Hb - 24, 24, 24, 3);
+    g.lineStyle(2, 0xc98a4a, 1);
+    g.beginPath();
+    g.moveTo(x + Wb / 2, y + Hb - 24);
+    g.lineTo(x + Wb / 2, y + Hb - 2);
+    g.moveTo(x + Wb / 2 - 12, y + Hb - 12);
+    g.lineTo(x + Wb / 2 + 12, y + Hb - 12);
+    g.strokePath();
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.fillStyle(0xcfd6dd, 1);
+    g.fillRoundedRect(x + Wb - 2, y - 6, 16, Hb + 6, 4);
+    g.strokeRoundedRect(x + Wb - 2, y - 6, 16, Hb + 6, 4);
+    g.fillStyle(0x9aa6b0, 1);
+    g.fillCircle(x + Wb + 6, y - 6, 8);
+    g.strokeCircle(x + Wb + 6, y - 6, 8);
+  }
+
+  private drawMarket(g: Phaser.GameObjects.Graphics, W: number, H: number): void {
+    const Wm = W * 0.8;
+    const Hm = H * 0.5;
+    const x = -Wm / 2;
+    const y = 0;
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.fillStyle(0xcaa477, 1);
+    g.fillRoundedRect(x, y, Wm, Hm, 5);
+    g.strokeRoundedRect(x, y, Wm, Hm, 5);
+    g.fillStyle(0xa9824f, 1);
+    g.fillRoundedRect(x + 6, y + Hm - 16, Wm - 12, 14, 3);
+    const ay = y - Hm * 0.7;
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle(i % 2 ? 0xff8d6b : 0xfff3e0, 1);
+      const x1 = x - 6 + (i * (Wm + 12)) / 6;
+      const x2 = x - 6 + ((i + 1) * (Wm + 12)) / 6;
+      const xm = x - 6 + ((i + 0.5) * (Wm + 12)) / 6;
+      g.fillTriangle(x1, ay, x2, ay, xm, ay + 16);
+    }
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.beginPath();
+    g.moveTo(x - 6, ay);
+    g.lineTo(x + Wm + 6, ay);
+    g.strokePath();
+  }
+
+  private drawWindmill(g: Phaser.GameObjects.Graphics, cx: number, cy: number): void {
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.fillStyle(0xefe3c8, 1);
+    g.fillRoundedRect(-13, -6, 26, 40, 4);
+    g.strokeRoundedRect(-13, -6, 26, 40, 4);
+    g.fillStyle(0xd8c79e, 1);
+    g.fillRoundedRect(-13, 22, 26, 12, 3);
+    g.fillStyle(0x9c6b3f, 1);
+    g.fillTriangle(-16, -6, 0, -22, 16, -6);
+    g.strokeTriangle(-16, -6, 0, -22, 16, -6);
+
+    const blades = this.add.graphics().setDepth(6).setPosition(cx, cy - 2);
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      const p = (lx: number, ly: number): [number, number] => [lx * c - ly * s, lx * s + ly * c];
+      const [x1, y1] = p(0, 0);
+      const [x2, y2] = p(4, -26);
+      const [x3, y3] = p(-3, -26);
+      g.lineStyle(2.4, 0x2c2440, 1);
+      blades.fillStyle(0xffffff, 1);
+      blades.lineStyle(2.4, 0x2c2440, 1);
+      blades.fillTriangle(x1, y1, x2, y2, x3, y3);
+      blades.strokeTriangle(x1, y1, x2, y2, x3, y3);
+    }
+    blades.fillStyle(0x5b4a32, 1);
+    blades.fillCircle(0, 0, 3.5);
+    this.windmillBlades = blades;
+  }
+
+  private drawBalloon(g: Phaser.GameObjects.Graphics): void {
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.fillStyle(0xa9824f, 1);
+    g.fillRoundedRect(-9, 10, 18, 12, 3);
+    g.strokeRoundedRect(-9, 10, 18, 12, 3);
+    g.lineStyle(1.4, 0x7a6a4a, 1);
+    g.beginPath();
+    g.moveTo(-7, 10);
+    g.lineTo(-10, -18);
+    g.moveTo(7, 10);
+    g.lineTo(10, -18);
+    g.strokePath();
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.fillStyle(0xffb0c4, 1);
+    g.fillEllipse(0, -26, 44, 56);
+    g.strokeEllipse(0, -26, 44, 56);
   }
 
   // ── parcels (Phase 5) ──────────────────────────────────────
