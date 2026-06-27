@@ -99,6 +99,8 @@ export class IslandScene extends Phaser.Scene {
   private decorViews = new Map<string, Phaser.GameObjects.Text>();
   private questBox!: Phaser.GameObjects.Text;
   private decorIdx = 0;
+  private skyGfx!: Phaser.GameObjects.Graphics;
+  private clouds: Phaser.GameObjects.Graphics[] = [];
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<"up" | "down" | "left" | "right" | "act", Phaser.Input.Keyboard.Key>;
@@ -121,9 +123,11 @@ export class IslandScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor("#bfe6ff");
+    this.cameras.main.setBackgroundColor("#9fd4ff");
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
 
+    this.buildSky();
+    this.buildBackdrop();
     this.buildTerrain();
     this.parcelGfx = this.add.graphics().setDepth(2);
 
@@ -234,6 +238,13 @@ export class IslandScene extends Phaser.Scene {
 
   override update(_time: number, deltaMs: number): void {
     const dt = deltaMs / 1000;
+
+    // Drifting clouds (parallax backdrop).
+    for (const c of this.clouds) {
+      c.x += 7 * dt;
+      if (c.x > WORLD_W + 240) c.x = -240;
+    }
+
     const dx =
       (this.keys.left.isDown || this.cursors.left?.isDown ? -1 : 0) +
       (this.keys.right.isDown || this.cursors.right?.isDown ? 1 : 0);
@@ -399,22 +410,62 @@ export class IslandScene extends Phaser.Scene {
   }
 
   private makeAnimal(type: string): Phaser.GameObjects.Container {
-    const color = type === "HEN" ? 0xfff4e0 : type === "AURORA" ? 0xf6b8e0 : 0xf0ead8;
     const shadow = this.add.ellipse(0, 12, 30, 10, 0x000000, 0.18);
-    const body = this.add.ellipse(0, 0, 30, 24, color).setStrokeStyle(2, 0x2a2540);
-    const head = this.add.circle(11, -8, 7, color).setStrokeStyle(2, 0x2a2540);
+    const g = this.add.graphics();
+    if (type === "HEN") this.drawHen(g);
+    else this.drawSheep(g, type === "AURORA");
     const produce = type === "HEN" ? "🥚" : type === "AURORA" ? "✨" : "🧶";
     const bubble = this.add
-      .text(0, -26, produce, { fontSize: "16px" })
+      .text(0, -28, produce, { fontSize: "16px" })
       .setOrigin(0.5)
       .setName("bubble")
       .setVisible(false);
     const hungry = this.add
-      .text(-14, -20, "❗", { fontSize: "14px" })
+      .text(-15, -22, "❗", { fontSize: "14px" })
       .setOrigin(0.5)
       .setName("hungry")
       .setVisible(false);
-    return this.add.container(0, 0, [shadow, body, head, bubble, hungry]).setDepth(900);
+    return this.add.container(0, 0, [shadow, g, bubble, hungry]).setDepth(900);
+  }
+
+  private drawSheep(g: Phaser.GameObjects.Graphics, aurora: boolean): void {
+    const wool = aurora ? 0xf6b8e0 : 0xffffff;
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.fillStyle(0x5a4636, 1);
+    g.fillRect(-7, 4, 3, 7);
+    g.fillRect(4, 4, 3, 7);
+    g.fillStyle(wool, 1);
+    g.fillCircle(0, -7, 8);
+    g.fillCircle(-7, 1, 7);
+    g.fillCircle(7, 1, 7);
+    g.fillCircle(0, 0, 11);
+    g.strokeCircle(0, 0, 11);
+    g.fillStyle(0x3c3242, 1);
+    g.fillEllipse(9, -1, 10, 12);
+    g.strokeEllipse(9, -1, 10, 12);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(10, -2.5, 1.4);
+  }
+
+  private drawHen(g: Phaser.GameObjects.Graphics): void {
+    g.lineStyle(2.4, 0x2c2440, 1);
+    g.fillStyle(0xe7a23a, 1);
+    g.fillRect(-3, 6, 2.4, 5);
+    g.fillRect(2, 6, 2.4, 5);
+    g.fillStyle(0xfff4e0, 1);
+    g.fillEllipse(0, 0, 20, 18);
+    g.strokeEllipse(0, 0, 20, 18);
+    g.fillStyle(0xffe1b0, 1);
+    g.fillEllipse(-2, 1, 10, 12);
+    g.fillStyle(0xfff4e0, 1);
+    g.fillCircle(7, -6, 5.5);
+    g.strokeCircle(7, -6, 5.5);
+    g.fillStyle(0xff6b6b, 1);
+    g.fillCircle(7, -11, 2);
+    g.fillStyle(0xf5a623, 1);
+    g.fillTriangle(12, -6, 16, -5, 12, -3.5);
+    g.fillStyle(0x3c3242, 1);
+    g.fillCircle(8, -7, 1.2);
   }
 
   // ── contextual action ──────────────────────────────────────
@@ -689,45 +740,166 @@ export class IslandScene extends Phaser.Scene {
   // ── avatars + terrain ──────────────────────────────────────
   private makeAvatar(name: string, self: boolean): Phaser.GameObjects.Container {
     const shadow = this.add.ellipse(0, 14, 26, 10, 0x000000, 0.18);
-    const body = this.add.circle(0, 0, 12, self ? 0xffce4f : 0x6fb7ff).setStrokeStyle(3, 0x2a2540);
+    const g = this.add.graphics();
+    g.lineStyle(3, 0x2a2540, 1);
+    g.fillStyle(self ? 0xffce4f : 0x6fb7ff, 1);
+    g.fillCircle(0, 0, 12);
+    g.strokeCircle(0, 0, 12);
+    g.fillStyle(0xffffff, 0.5);
+    g.fillCircle(-3.5, -3.5, 3.5); // highlight
     const label = this.add
       .text(0, -26, name, {
         fontFamily: "Nunito, sans-serif",
         fontSize: "12px",
         color: "#2a2540",
         fontStyle: "bold",
+        backgroundColor: "rgba(255,253,246,0.75)",
+        padding: { x: 4, y: 1 },
       })
       .setOrigin(0.5);
-    return this.add.container(0, 0, [shadow, body, label]).setDepth(1000);
+    return this.add.container(0, 0, [shadow, g, label]).setDepth(1000);
+  }
+
+  // Deterministic value-noise so every client bakes the same grass/flowers.
+  private nz(a: number, b: number): number {
+    const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return v - Math.floor(v);
+  }
+
+  private buildSky(): void {
+    this.skyGfx = this.add.graphics().setScrollFactor(0).setDepth(-100);
+    this.paintSky();
+    this.scale.on("resize", () => this.paintSky());
+  }
+
+  private paintSky(): void {
+    const w = this.scale.width;
+    const h = this.scale.height;
+    this.skyGfx.clear();
+    // top = deeper sky blue, bottom = pale warm horizon (matches the prototype).
+    this.skyGfx.fillGradientStyle(0x6fb7ff, 0x6fb7ff, 0xcdeafe, 0xffe7c4, 1);
+    this.skyGfx.fillRect(0, 0, w, h);
+  }
+
+  private buildBackdrop(): void {
+    // Parallax background islands floating in the sky.
+    const BG = [
+      { x: 6 * TILE, y: 33 * TILE, s: 0.55, d: 0.4, tint: 0x8fb8d8 },
+      { x: 46 * TILE, y: 6 * TILE, s: 0.7, d: 0.5, tint: 0xa6c8e2 },
+      { x: 50 * TILE, y: 36 * TILE, s: 0.45, d: 0.32, tint: 0x86b0d4 },
+      { x: 2 * TILE, y: 4 * TILE, s: 0.5, d: 0.45, tint: 0x9cc0de },
+    ];
+    for (const o of BG) {
+      const g = this.add.graphics().setScrollFactor(o.d).setDepth(-50);
+      const s = o.s;
+      g.fillStyle(o.tint, 0.6);
+      g.beginPath();
+      g.moveTo(o.x - 70 * s, o.y);
+      g.lineTo(o.x + 70 * s, o.y);
+      g.lineTo(o.x + 40 * s, o.y + 80 * s);
+      g.lineTo(o.x, o.y + 120 * s);
+      g.lineTo(o.x - 40 * s, o.y + 78 * s);
+      g.closePath();
+      g.fillPath();
+      g.fillStyle(o.tint, 0.9);
+      g.fillEllipse(o.x, o.y, 140 * s, 40 * s);
+      g.fillStyle(0xffffff, 0.25);
+      g.fillEllipse(o.x, o.y - 4 * s, 132 * s, 18 * s);
+    }
+
+    // Drifting clouds.
+    for (let i = 0; i < 14; i++) {
+      const g = this.add.graphics().setScrollFactor(0.3).setDepth(-40);
+      const s = 0.6 + (i % 5) * 0.2;
+      g.fillStyle(0xffffff, 0.55);
+      g.fillEllipse(0, 0, 68 * s, 36 * s);
+      g.fillEllipse(-26 * s, 6 * s, 44 * s, 26 * s);
+      g.fillEllipse(28 * s, 5 * s, 48 * s, 28 * s);
+      g.fillEllipse(4 * s, -10 * s, 40 * s, 28 * s);
+      g.setPosition((i * 397) % WORLD_W, (i * 257) % Math.floor(WORLD_H * 0.7));
+      this.clouds.push(g);
+    }
   }
 
   private buildTerrain(): void {
-    const g = this.add.graphics();
+    const g = this.add.graphics().setDepth(0);
+
+    // 1) Floating-island undersides first (cliff faces hanging into the sky).
+    for (let ty = 0; ty < ROWS; ty++) {
+      for (let tx = 0; tx < COLS; tx++) {
+        if (!isLand(tx, ty) || isLand(tx, ty + 1)) continue;
+        const x = tx * TILE;
+        const depth = TILE * 1.15 + this.nz(tx, ty) * TILE * 0.5;
+        g.fillGradientStyle(0x6e5743, 0x6e5743, 0x3c2e24, 0x3c2e24, 1);
+        g.fillRect(x, ty * TILE + TILE - 2, TILE + 1, depth);
+      }
+    }
+
+    // 2) Grass (3-tone noise), edge highlights, tufts, pond.
     for (let ty = 0; ty < ROWS; ty++) {
       for (let tx = 0; tx < COLS; tx++) {
         if (!isLand(tx, ty)) continue;
         const x = tx * TILE;
         const y = ty * TILE;
         if (isPond(tx, ty)) {
-          g.fillStyle(0x4ea3e0, 1);
-          g.fillRect(x, y, TILE, TILE);
-          g.fillStyle(0x6cc7f0, 0.5);
-          g.fillRect(x + 6, y + 6, TILE - 12, 6);
+          g.fillStyle(0x5fb8d8, 1);
+          g.fillRect(x, y, TILE + 1, TILE + 1);
+          g.fillStyle(0x9fe0f2, 0.5);
+          g.fillRect(x, y, TILE + 1, 5);
           continue;
         }
-        g.fillStyle(((tx + ty) & 1) === 0 ? 0x6cc05f : 0x63b657, 1);
-        g.fillRect(x, y, TILE, TILE);
+        const n = this.nz(tx, ty);
+        g.fillStyle(n > 0.62 ? 0x88d273 : n < 0.4 ? 0x5da94f : 0x73c162, 1);
+        g.fillRect(x, y, TILE + 1, TILE + 1);
         if (!isLand(tx, ty - 1)) {
-          g.fillStyle(0x82d172, 1);
-          g.fillRect(x, y, TILE, 4);
+          g.fillStyle(0xc3f5af, 0.55);
+          g.fillRect(x, y, TILE + 1, 4);
         }
-        if (!isLand(tx, ty + 1)) {
-          g.fillStyle(0x8a5a3c, 1);
-          g.fillRect(x, y + TILE - 12, TILE, 12);
-          g.fillStyle(0x6f4630, 1);
-          g.fillRect(x, y + TILE, TILE, 10);
+        // grass tufts
+        if ((tx * 3 + ty * 5) % 4 === 0) {
+          g.lineStyle(1.4, 0x3c9a3c, 0.32);
+          const bx = x + 12 + this.nz(tx, ty) * 30;
+          const by = y + 30 + this.nz(ty, tx) * 16;
+          g.beginPath();
+          g.moveTo(bx, by);
+          g.lineTo(bx - 2, by - 7);
+          g.moveTo(bx + 4, by);
+          g.lineTo(bx + 5, by - 8);
+          g.strokePath();
         }
       }
+    }
+
+    // 3) Scattered flowers + pebbles (purely decorative, deterministic).
+    const PETAL = [0xff7eb0, 0xffd45a, 0x9d8cff, 0xff9b6b];
+    for (let ty = 0; ty < ROWS; ty++) {
+      for (let tx = 0; tx < COLS; tx++) {
+        if (!isLand(tx, ty) || isPond(tx, ty)) continue;
+        const r = this.nz(tx * 7.1, ty * 3.3);
+        if (r < 0.84) continue;
+        const px = x0(tx) + 10 + this.nz(tx, ty * 2) * 36;
+        const py = ty * TILE + 10 + this.nz(tx * 2, ty) * 36;
+        if (r > 0.94) {
+          g.fillStyle(0xb9b1a0, 1);
+          g.fillEllipse(px, py, 9, 6);
+          g.fillStyle(0xffffff, 0.5);
+          g.fillEllipse(px - 1, py - 1, 3.6, 2.2);
+        } else {
+          const col = PETAL[Math.floor(r * 1000) % PETAL.length] ?? 0xff7eb0;
+          g.fillStyle(0x4a9d3f, 1);
+          g.fillRect(px - 1, py, 2, 7);
+          g.fillStyle(col, 1);
+          for (let i = 0; i < 5; i++) {
+            const a = (i / 5) * 6.28;
+            g.fillCircle(px + Math.cos(a) * 3.2, py + Math.sin(a) * 3.2, 2.4);
+          }
+          g.fillStyle(0xfff0b8, 1);
+          g.fillCircle(px, py, 2.2);
+        }
+      }
+    }
+    function x0(tx: number): number {
+      return tx * TILE;
     }
   }
 
