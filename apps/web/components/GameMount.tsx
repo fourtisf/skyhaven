@@ -30,6 +30,8 @@ interface Hud {
   action?: string;
   playerX?: number;
   playerY?: number;
+  playerCount?: number;
+  leaders?: { name: string; level: number; coins: number; me: boolean }[];
 }
 
 export default function GameMount() {
@@ -182,6 +184,19 @@ export default function GameMount() {
           </div>
 
           <canvas ref={miniRef} width={124} height={92} className="minimap" />
+
+          {hud.leaders && hud.leaders.length > 0 && (
+            <div className="leaderboard">
+              <div className="lb-head">🏆 Top farmers · {hud.playerCount} online</div>
+              {hud.leaders.map((l, i) => (
+                <div key={i} className={`lb-row${l.me ? " me" : ""}`}>
+                  <span className="lb-rank">{i + 1}</span>
+                  <span className="lb-name">{l.name}</span>
+                  <span className="lb-stat">Lv{l.level} · {l.coins}🪙</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {hud.quest && (
             <div className="quest-card">

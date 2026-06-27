@@ -455,7 +455,22 @@ export class IslandScene extends Phaser.Scene {
     if (!me) return;
     const step = me.questStep;
     const q = step < ONBOARDING.length ? ONBOARDING[step] : undefined;
+
+    // Live leaderboard from connected players (competition + presence).
+    const leaders: { name: string; level: number; coins: number; me: boolean }[] = [];
+    (room.state.players as SchemaMap<NetPlayer>).forEach((pl, key) => {
+      leaders.push({
+        name: pl.name || "Pilot",
+        level: pl.level,
+        coins: pl.coins,
+        me: key === room.sessionId,
+      });
+    });
+    leaders.sort((a, b) => b.level - a.level || b.coins - a.coins);
+
     this.game.events.emit("hud", {
+      playerCount: leaders.length,
+      leaders: leaders.slice(0, 5),
       online: true,
       coins: me.coins,
       level: me.level,

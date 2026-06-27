@@ -237,6 +237,52 @@ main {
 .uibtn:active {
   transform: translateY(2px);
 }
+.leaderboard {
+  position: absolute;
+  top: 244px;
+  right: 10px;
+  width: 168px;
+  background: rgba(255, 253, 246, 0.95);
+  border: 2px solid var(--edge, #e7dcc4);
+  border-radius: 12px;
+  padding: 7px 9px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.1);
+  font-family: "Nunito", sans-serif;
+  z-index: 10;
+}
+.lb-head {
+  font-family: "Fredoka", sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--gold-deep, #e0a52f);
+  margin-bottom: 4px;
+}
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2a2540;
+  padding: 1px 0;
+}
+.lb-row.me {
+  color: var(--sky-deep, #3f8de0);
+}
+.lb-rank {
+  width: 14px;
+  color: #9a8f78;
+}
+.lb-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-stat {
+  font-size: 10px;
+  color: #9a8f78;
+}
 .quest-card {
   position: absolute;
   left: 10px;
